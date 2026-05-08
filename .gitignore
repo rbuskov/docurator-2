@@ -1,0 +1,63 @@
+# Secrets — OAuth client credentials live here per architecture.md "Docker Compose layout"
+.env
+.env.local
+.env.*.local
+
+# User data — bind-mounted host volumes (architecture.md "High-level architecture")
+# `data/` holds the SQLite DB + per-user config; `invoices/` holds confirmed receipt files.
+/data/
+/invoices/
+
+# Local docker-compose overrides (per-developer; not part of the shipped stack)
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.eslintcache
+
+# Vite
+.vite/
+
+# Playwright (used for HTML→PDF rendering — see architecture.md "Tech stack")
+playwright/.cache/
+playwright-report/
+test-results/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# SQLite ancillary files. The DB lives in /data/ which is already ignored, but
+# better-sqlite3 in WAL mode (architecture.md "Data retention and backup") can
+# leave these alongside any *.db that ends up outside /data/ during development.
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+logs/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code per-developer settings (the rest of .claude/ is intentionally tracked)
+.claude/settings.local.json
