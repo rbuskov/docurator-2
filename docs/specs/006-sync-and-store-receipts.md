@@ -68,8 +68,9 @@ I can click "Sync now" on the Dashboard and watch per-account progress stream in
     - `created_at` TEXT NOT NULL — ISO 8601 timestamp
     - `updated_at` TEXT NOT NULL — ISO 8601 timestamp
     - UNIQUE (`account_id`, `content_hash`) — hard dedup, scoped per account
-    - FOREIGN KEY (`account_id`, `message_id`) REFERENCES `processed_messages`(`account_id`, `message_id`)
+    - **No FOREIGN KEY to `processed_messages`.** Slice 004's `processed_messages` is an append-only audit log with no unique key on `(account_id, message_id)` (multiple rows per message are how reclassification is recorded; see Slice 004 § "Schema choices"), so no composite FK can target it. `documents.message_id` is a plain TEXT column whose semantic meaning is "the Gmail message id this artifact came from"; referential integrity to a specific classification attempt, when needed, is enforced at the application layer (the sync orchestrator inserts both rows in the same transaction). `documents.account_id` keeps its `REFERENCES accounts(id)` FK, which gives the cascade behavior the rest of the design relies on.
     - INDEX on `(account_id, review_status, created_at)` for the Inbox listing
+    - INDEX on `(account_id, message_id)` so the audit-view JOIN (Slice 010) can pull "documents produced for this message" without scanning
 - **Migrations:**
   - `0005_create_documents.sql` — creates the `documents` table above
 - **API endpoints:**
@@ -112,7 +113,7 @@ I can click "Sync now" on the Dashboard and watch per-account progress stream in
 - **Other:**
   - **First slice that produces files on disk** under `./invoices/{account_slug}/{yyyy}/{mm}/...`. Filenames sanitized; paths confined to the `./invoices` root.
   - **First slice with a long-running orchestrator.** Single in-memory job state; no persisted job table. A container restart mid-sync drops the job; partial work survives (already-written rows stay), and the next sync resumes naturally because `processed_messages` is the idempotency anchor.
-  - **Idempotency under re-sync.** Re-running sync on the same date range over the same accounts produces zero new rows in `processed_messages` or `documents`, because the orchestrator skips `(account_id, message_id)` already present.
+  - **Idempotency under re-sync.** Re-running sync on the same date range over the same accounts produces zero new rows in `processed_messages` or `documents`, because the orchestrator's per-message transaction calls `existsForMessage` before inserting and skips when a prior attempt is present. Reclassification flows (Slice 010 single-row, Slice 014 batch) bypass this check by design — they are how multiple `processed_messages` rows for the same `(account_id, message_id)` are produced.
   - **Hard dedup across messages within an account.** When the same exact PDF arrives twice (e.g. body + attachment, or two threads with the same attachment) inside one account, `documents` stores it once due to the `(account_id, content_hash)` unique constraint; the second encounter is logged in `processed_messages` (with status='success') but no `documents` row is created.
 
 ## Out of scope
@@ -140,7 +141,7 @@ This slice realizes `architecture.md` § "Sync (manual trigger)", § "High-level
   - Otherwise, search by date range using `users.messages.list` with `q='after:YYYY/MM/DD'`. The default range is `SYNC_DEFAULT_WINDOW_DAYS` days back from now.
   - After the first non-incremental sync completes for an account, `sync_state.last_history_id` is set so subsequent syncs can run incrementally.
 - **Per-message processing.** For each message id from the discovery step (in the order Gmail returns):
-  1. If `(account_id, message_id)` already exists in `processed_messages`, emit `sync.message` with the prior status and skip — strict idempotency.
+  1. If `processed_messages.existsForMessage({ account_id, message_id })` (Slice 004's repository method) returns true, emit `sync.message` with the prior status (looked up via `processed_messages.listForAccount` filtered to that message — most-recent attempt wins) and skip — application-level idempotency. There is no DB-level unique constraint to rely on; the existence check + insert run inside one `db.transaction(...)` per message so a concurrent reclassify (Slice 010) can't double-write a sync attempt.
   2. Fetch the full message via the Slice 003 client (`format='full'`, the same path Slice 005 already uses).
   3. Run the classification pipeline (Slice 005's `classifyMessage`). If it raises (Ollama unreachable, timeout, schema-violation), insert a `processed_messages` row with `status='failed'` and the error message; emit `sync.message` with `status: 'failed'` and continue with the next message.
   4. On success, decide which artifacts to persist:
@@ -156,6 +157,7 @@ This slice realizes `architecture.md` § "Sync (manual trigger)", § "High-level
 - **Removing the dev seed panel.** Slice 004 introduced `DevSeedPanel.tsx`, `src/server/api/dev.ts`, and `GET /api/dev/enabled` as a temporary dev surface. This slice deletes them; the equivalent observable result ("rows in `processed_messages` for an account") is now produced by real sync. The Slice 004 endpoint `GET /api/accounts/:id/processed-messages` is **kept** — it has no real consumer until Slice 010, but it's a stable read endpoint and removing it would force Slice 010 to recreate it.
 - **Playwright in Docker.** The Dockerfile build stage runs `npx playwright install --with-deps chromium`. The runtime stage copies the browser binary path so the executable is available at runtime. This adds significantly to image size; Slice 016 may revisit. The `postinstall` script in `package.json` mirrors this for local-dev `npm install`.
 - **No notes column yet.** `architecture.md` § "Storage" lists a `notes` column on `documents`. This slice does not include it; it will land alongside the inline-editing UI in Slice 008 (or 016 polish if the team prefers minimal write surface in 008). Flag.
+- **`documents` ↔ `processed_messages` linkage without a FK.** With Slice 004's append-only `processed_messages` (no unique on `(account_id, message_id)`), the historical FK design from `architecture.md` § "Storage" — `documents.(account_id, message_id) FK processed_messages.(account_id, message_id)` — cannot be expressed in SQLite. The current design holds `documents.message_id` as plain text and relies on the sync orchestrator (and Slice 010's reclassify orchestrator) to insert both rows in the same transaction so an orphan `documents` row is impossible in normal operation. Slice 010's audit JOIN uses `(account_id, message_id)` as the join key (covered by the new index above). If a future slice wants per-attempt provenance ("which classification run produced this document"), the right addition is a `documents.processed_message_id INTEGER REFERENCES processed_messages(id)` column — `processed_messages.id` is a unique key, so a single-column FK is fine. Deferred until needed.
 
 ## Acceptance criteria
 
