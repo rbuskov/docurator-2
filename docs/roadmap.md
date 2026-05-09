@@ -1,7 +1,7 @@
 # Roadmap
 
 - [x] 001-walking-skeleton
-- [ ] 002-connect-gmail-accounts
+- [x] 002-connect-gmail-accounts
 - [ ] 003-see-my-emails-listed
 - [ ] 004-persistent-state-and-processed-messages-log
 - [ ] 005-classify-one-email-end-to-end

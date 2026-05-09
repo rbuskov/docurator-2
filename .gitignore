@@ -5,7 +5,9 @@
 
 # User data — bind-mounted host volumes (architecture.md "High-level architecture")
 # `data/` holds the SQLite DB + per-user config; `invoices/` holds confirmed receipt files.
-/data/
+# Ignore the contents but keep the directory present on a fresh clone via `data/.gitkeep`.
+/data/*
+!/data/.gitkeep
 /invoices/
 
 # Local docker-compose overrides (per-developer; not part of the shipped stack)

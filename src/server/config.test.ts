@@ -1,22 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const ENV_KEYS = [
+  'APP_PORT',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'OAUTH_REDIRECT_PORT',
+] as const
+
 describe('server config', () => {
-  const originalAppPort = process.env.APP_PORT
+  const originals: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {}
 
   beforeEach(() => {
     vi.resetModules()
+    for (const key of ENV_KEYS) {
+      originals[key] = process.env[key]
+      delete process.env[key]
+    }
   })
 
   afterEach(() => {
-    if (originalAppPort === undefined) {
-      delete process.env.APP_PORT
-    } else {
-      process.env.APP_PORT = originalAppPort
+    for (const key of ENV_KEYS) {
+      const original = originals[key]
+      if (original === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = original
+      }
     }
   })
 
   it('defaults port to 3737 when APP_PORT is unset', async () => {
-    delete process.env.APP_PORT
     const { config } = await import('./config.js')
     expect(config.port).toBe(3737)
   })
@@ -28,8 +41,51 @@ describe('server config', () => {
   })
 
   it('exposes a frozen config object', async () => {
-    delete process.env.APP_PORT
     const { config } = await import('./config.js')
     expect(Object.isFrozen(config)).toBe(true)
+  })
+
+  it('defaults googleClientId to empty string when GOOGLE_CLIENT_ID is unset', async () => {
+    const { config } = await import('./config.js')
+    expect(config.googleClientId).toBe('')
+  })
+
+  it('reads googleClientId from GOOGLE_CLIENT_ID env var', async () => {
+    process.env.GOOGLE_CLIENT_ID = 'my-client-id.apps.googleusercontent.com'
+    const { config } = await import('./config.js')
+    expect(config.googleClientId).toBe('my-client-id.apps.googleusercontent.com')
+  })
+
+  it('defaults googleClientSecret to empty string when GOOGLE_CLIENT_SECRET is unset', async () => {
+    const { config } = await import('./config.js')
+    expect(config.googleClientSecret).toBe('')
+  })
+
+  it('reads googleClientSecret from GOOGLE_CLIENT_SECRET env var', async () => {
+    process.env.GOOGLE_CLIENT_SECRET = 's3cret'
+    const { config } = await import('./config.js')
+    expect(config.googleClientSecret).toBe('s3cret')
+  })
+
+  it('defaults oauthRedirectPort to config.port when OAUTH_REDIRECT_PORT is unset', async () => {
+    const { config } = await import('./config.js')
+    expect(config.oauthRedirectPort).toBe(config.port)
+  })
+
+  it('reads oauthRedirectPort from OAUTH_REDIRECT_PORT env var when set', async () => {
+    process.env.OAUTH_REDIRECT_PORT = '8080'
+    const { config } = await import('./config.js')
+    expect(config.oauthRedirectPort).toBe(8080)
+  })
+
+  it('uses APP_PORT as oauthRedirectPort default when APP_PORT is set but OAUTH_REDIRECT_PORT is not', async () => {
+    process.env.APP_PORT = '5555'
+    const { config } = await import('./config.js')
+    expect(config.oauthRedirectPort).toBe(5555)
+  })
+
+  it("defaults dbPath to './data/app.db'", async () => {
+    const { config } = await import('./config.js')
+    expect(config.dbPath).toBe('./data/app.db')
   })
 })
