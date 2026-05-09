@@ -1,6 +1,6 @@
 # Slice 011: Export
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
