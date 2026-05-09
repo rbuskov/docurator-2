@@ -1,6 +1,6 @@
 # Slice 002: Connect Gmail accounts
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
