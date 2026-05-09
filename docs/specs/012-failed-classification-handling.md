@@ -1,6 +1,6 @@
 # Slice 012: Failed-classification handling
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
