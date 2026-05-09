@@ -1,6 +1,6 @@
 # Slice 009: Tags
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
