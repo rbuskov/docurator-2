@@ -1,6 +1,6 @@
 # Slice 004: Persistent state and processed-messages log
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
