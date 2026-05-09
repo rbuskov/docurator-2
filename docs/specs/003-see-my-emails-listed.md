@@ -1,6 +1,6 @@
 # Slice 003: See my emails listed
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
