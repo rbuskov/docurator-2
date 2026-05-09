@@ -1,6 +1,6 @@
 # Slice 005: Classify one email end-to-end
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
