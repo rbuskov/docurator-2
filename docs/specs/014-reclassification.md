@@ -1,6 +1,6 @@
 # Slice 014: Reclassification
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
