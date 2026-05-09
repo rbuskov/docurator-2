@@ -1,6 +1,6 @@
 # Slice 015: Sender memory and auto-skip
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
