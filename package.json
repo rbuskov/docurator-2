@@ -10,7 +10,8 @@
   },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"NODE_ENV=development tsx watch --env-file=.env src/server/index.ts\" \"vite\"",
-    "build": "vite build && tsc -p tsconfig.server.json && node -e \"require('node:fs').cpSync('src/server/db/migrations','dist/server/db/migrations',{recursive:true})\"",
+    "check:gmail-readonly": "tsx scripts/check-gmail-readonly.ts",
+    "build": "npm run check:gmail-readonly && vite build && tsc -p tsconfig.server.json && node -e \"require('node:fs').cpSync('src/server/db/migrations','dist/server/db/migrations',{recursive:true})\"",
     "start": "NODE_ENV=production node --env-file=.env dist/server/index.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -22,7 +23,8 @@
     "googleapis": "^171.4.0",
     "hono": "^4.6.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^6"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",

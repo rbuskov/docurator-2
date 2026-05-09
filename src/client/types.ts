@@ -9,3 +9,12 @@ export type Account = {
   last_seen_at: string | null
   status: AccountStatus
 }
+
+export type Message = {
+  id: string
+  thread_id: string
+  subject: string
+  from: string
+  date: string
+  internal_date: string
+}

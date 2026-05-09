@@ -12,7 +12,7 @@ export default [
     test: {
       name: 'server',
       environment: 'node',
-      include: ['src/server/**/*.test.ts'],
+      include: ['src/server/**/*.test.ts', 'scripts/**/*.test.ts'],
     },
   },
   {

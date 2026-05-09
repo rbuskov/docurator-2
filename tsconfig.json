@@ -15,5 +15,11 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "vitest.config.ts", "vitest.workspace.ts", "vite.config.ts"]
+  "include": [
+    "src/**/*",
+    "scripts/**/*",
+    "vitest.config.ts",
+    "vitest.workspace.ts",
+    "vite.config.ts"
+  ]
 }

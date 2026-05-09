@@ -70,7 +70,6 @@ export function Dashboard({ pollIntervalMs, pollTimeoutMs }: DashboardProps) {
   if (accounts === null && error === null) {
     return (
       <main>
-        <h1>Docurator</h1>
         <p>Loading…</p>
       </main>
     )
@@ -80,7 +79,6 @@ export function Dashboard({ pollIntervalMs, pollTimeoutMs }: DashboardProps) {
 
   return (
     <main>
-      <h1>Docurator</h1>
       {error !== null && <p role="alert">{error}</p>}
       <AccountList accounts={list} onReconnect={handleReconnect} />
       <AddAccountButton

@@ -48,17 +48,14 @@ describe('Dashboard', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows a loading state on mount, then renders the heading + accounts', async () => {
+  it('shows a loading state on mount, then renders the accounts', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ accounts: [aliceConnected] }))
 
     render(<Dashboard pollIntervalMs={20} pollTimeoutMs={5000} />)
 
     expect(screen.getByText(/loading/i)).toBeDefined()
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /docurator/i })).toBeDefined()
-    })
-    expect(screen.getByText('alice@example.com')).toBeDefined()
+    await waitFor(() => screen.getByText('alice@example.com'))
     expect(screen.getByRole('button', { name: /add gmail account/i })).toBeDefined()
   })
 
