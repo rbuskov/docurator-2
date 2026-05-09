@@ -74,9 +74,11 @@ This isn't a marketing position; it's an architectural commitment. It rules out 
 
 ### Read-only access to email
 
-Docurator requests only `gmail.readonly` from Google, for every account the user connects. It cannot label, move, archive, mark as read, send, or delete any email in any of those accounts. Each connected inbox after a sync is identical to what it was before. The only signal of Docurator's existence is in its own local database.
+Docurator's only Gmail-touching scope is `gmail.readonly`, for every account the user connects. It cannot label, move, archive, mark as read, send, or delete any email in any of those accounts. Each connected inbox after a sync is identical to what it was before. The only signal of Docurator's existence is in its own local database.
 
-This is a stronger guarantee than "we promise not to mess with your email." We've never asked for the capability, so we structurally cannot misuse it. If Docurator is ever compromised, breaks, or behaves unexpectedly, the worst it can do is read.
+The OAuth flow itself also requests `openid` and `userinfo.email` so the app can recognize *which* Google account just authenticated and key its local records by that address. These are read-only Google identity scopes — they grant access to the user's email address, nothing more — and they touch no Gmail data. They are part of the OAuth handshake, not part of how Docurator interacts with mail.
+
+This is a stronger guarantee than "we promise not to mess with your email." We've never asked for the capability to modify Gmail, so we structurally cannot misuse it. If Docurator is ever compromised, breaks, or behaves unexpectedly, the worst it can do is read.
 
 ### Curate, don't hoard
 

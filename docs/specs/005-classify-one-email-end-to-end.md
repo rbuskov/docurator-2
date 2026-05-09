@@ -26,7 +26,10 @@ I can pick a real email from any of my connected Gmail accounts (in the Inbox vi
   - `src/server/index.ts`, `src/server/config.ts`, `src/server/api/` (Slice 001)
   - `src/server/auth/accounts.ts`, `src/server/auth/session.ts` (Slice 002)
   - `src/server/gmail/client.ts` (Slice 003) — extended with `getMessage(format='full')` use and a new `getAttachment` method here
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:**
   - Google OAuth + Gmail API access for each connected account (Slice 002 produced the tokens; Slice 003 added the client)
 - **Other:** —
@@ -77,12 +80,12 @@ I can pick a real email from any of my connected Gmail accounts (in the Inbox vi
 - Per-message reclassify action against persisted state → Slices 010 / 014
 - Failure logging into `processed_messages.status='failed'` → Slice 012 (this slice surfaces failures only via the API response, not by writing them)
 - Inline editable fields (`vendor`, `amount`, etc. that the model returns) — for now the API response includes them when the model produced them; an editing UI ships in Slice 008
-- Tag-aware classification or sender-memory adjustments → Slices 009 / 015
+- Sender-memory adjustments to classification (auto-approve / auto-skip via `senders.listing` and approved/rejected counts) → Slice 015. Tag-aware classification (the model receiving tag hints from the user's history) is **not planned for v1** per Slice 015's Out of scope.
 - Removing the dev seed panel introduced in Slice 004 → Slice 006
 
 ## Detailed design
 
-This slice realizes `architecture.md` § "Classification module" steps 1–4 and § "Ollama" reachability for the first time end to end, but skips step 5's persistence — that's Slice 006's responsibility. It is intentionally early in the sequence (per `initial-feature-slices.md`'s ordering note) because it answers the project's riskiest question: can a local vision model classify these emails reliably? Building it before any of the persistence/review/export machinery means we find out cheaply.
+This slice realizes `architecture.md` § "Components — Classification module" end to end (steps 1–5: body extraction, prompt building, Ollama call, response parsing, returning the decision via the API response), plus `architecture.md` § "Ollama" reachability for the first time. The piece it skips is the sync handler's persistence step (`architecture.md` § "Components — Gmail sync handler", step 4: "If receipt/invoice, persist (see Storage); otherwise, log the decision and discard the content") — that's Slice 006's responsibility. This slice is intentionally early in the sequence (per `initial-feature-slices.md`'s ordering note) because it answers the project's riskiest question: can a local vision model classify these emails reliably? Building it before any of the persistence/review/export machinery means we find out cheaply.
 
 - **Per-message synchronous endpoint.** The Inbox row's "Classify" button calls a synchronous endpoint that does the whole pipeline and returns the decision. SSE/streaming progress is not needed for one message; that machinery is a Slice 006 concern when batch sync ships. Long timeouts (`OLLAMA_TIMEOUT_MS=120000`) accommodate slow CPU inference; the UI shows a spinner during the wait.
 - **Body extraction.** `extractBodyText` walks the message payload. Preference order: `multipart/alternative` → `text/plain`; failing that, `text/html` is parsed and the visible text content is extracted (no JS execution, no styling). This matches `architecture.md` § "Classification module" step 1's "Convert HTML body to plain text". Inline `cid:` images are detected and counted (their existence is included in the metadata block of the prompt, e.g. "this email contains 2 inline images") but are not yet rendered into the model's input — that requires an HTML-rendering step covered by Slice 006's Playwright path.
@@ -105,7 +108,7 @@ This slice realizes `architecture.md` § "Classification module" steps 1–4 and
 - During and after a Classify call, no row is added to `processed_messages` or `documents`; `sqlite3 data/app.db "SELECT COUNT(*) FROM processed_messages;"` returns the same number it did before the click.
 - `npm run check:gmail-readonly` (Slice 003 guard) still passes after this slice's `gmail/client.ts` modification.
 - `GET /api/ollama/health` returns within ~5s even when Ollama is unreachable (no hung requests).
-- The codebase contains zero references to non-`gmail.readonly` OAuth scopes (verified by grep) and zero references to non-read Gmail API methods (verified by the build-time check).
+- The codebase contains no Gmail OAuth scope other than `gmail.readonly` (the only Gmail-touching scope; `openid` and `userinfo.email` from Slice 002 are the only other OAuth scopes, both for identity per `architecture.md` § "Read-only Gmail access") and zero references to non-read Gmail API methods (verified by the build-time check).
 
 ## Implementation notes
 

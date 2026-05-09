@@ -33,7 +33,10 @@ When the classifier breaks on some weird email — in any of my accounts — I c
   - `src/server/index.ts`, `src/server/config.ts`, `src/server/api/` (Slice 001)
   - `src/server/api/audit.ts` (Slice 010) — extended here
   - `src/server/db/repositories/processed_messages.ts` (Slice 004) — its `listAudit` query (added in Slice 010) is extended here with the `status` filter
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:**
   - Google OAuth + Gmail API access per account (Slice 002 + 003)
   - Ollama at `OLLAMA_URL` (Slice 005)

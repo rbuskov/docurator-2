@@ -38,7 +38,10 @@ I can open an Audit page that lists every email the classifier has processed acr
   - `src/server/gmail/client.ts` (Slices 003 / 005) — used by reclassify to fetch the message
   - `src/server/classify/index.ts` (Slice 005) — `classifyMessage` is the per-message pipeline reclassify reuses
   - `src/server/files.ts` (Slice 006) — used by reclassify to persist any new artifacts
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:**
   - Google OAuth + Gmail API access per account (Slice 002 + 003)
   - Ollama at `OLLAMA_URL` (Slice 005)
@@ -55,7 +58,7 @@ I can open an Audit page that lists every email the classifier has processed acr
 - **UI views / components:**
   - `Audit.tsx` — at route `/audit`. Top filter bar (`AuditFilters`), then the audit table (`AuditTable`), then pagination controls. Row count and current filters are shown above the table ("Showing 1–50 of 1,247 audit rows · `business@example.com` · last 30 days"). The view loads `GET /api/audit` on mount and on any filter or pagination change, with the URL query string mirroring the active filters so reload/share preserves the view.
   - `AuditFilters.tsx` — bar with: account dropdown (reuses `AccountPicker`, with "All accounts" prepended), classification dropdown (`All / invoice / receipt / other`), confidence dropdown (`All / high / medium / low`), sender-domain text input (free text, exact match), since/until date inputs, free-text search input (`q`). A "Reset filters" button clears all of them. Filter changes are debounced 200ms before re-fetching.
-  - `AuditTable.tsx` — regular table (≤200 rows per page is the default `limit`) with columns: Account (email + display_name + small slug hint), Date (`internal_date`), Sender (`sender_domain`), Subject (`subject`, truncated), Status (`success` / `failed` rendered as plain text in this slice — visual indicator deferred to Slice 012), Classification (`invoice` / `receipt` / `other` with a small color hint), Confidence (`high` / `medium` / `low`), Documents (`document_count`; click to navigate to `/inbox?message_id=…` if > 0), Tags (chips via `TagChip` for receipts), Open in Gmail, Reclassify.
+  - `AuditTable.tsx` — regular table (≤200 rows per page is the default `limit`) with columns: Account (email + display_name + small slug hint), Date (`internal_date`), Sender (`sender_domain`), Subject (`subject`, truncated), Status (`success` / `failed` rendered as plain text in this slice — visual indicator deferred to Slice 012), Classification (`invoice` / `receipt` / `other` with a small color hint), Confidence (`high` / `medium` / `low`), Model (`model_used` — e.g. `qwen2.5vl:7b`, or sentinels like `dev-seed` / `auto-block` from later slices), Documents (`document_count`; click to navigate to `/inbox?message_id=…` if > 0), Tags (chips via `TagChip` for receipts), Open in Gmail, Reclassify.
   - `GmailDeepLink.tsx` — anchor that builds `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(account_email)}#all/${message_id}` and opens in a new tab. The `authuser=<email>` query parameter makes Gmail honour the right account regardless of the positional `/u/N/` slot the browser is currently signed into.
   - `ReclassifyButton.tsx` — small button per row that POSTs to the reclassify endpoint and renders a transient inline state ("Re-running…", then a success chip with the new decision or a failure chip with the error). After success, the row in the table is replaced by the new audit row from the response (the table re-fetches the current page in the background to also pick up the prior decisions in their existing positions).
   - `Nav.tsx` (modified) — adds an "Audit" link between "Inbox" and "Settings" (or wherever fits the existing layout).
@@ -79,7 +82,7 @@ I can open an Audit page that lists every email the classifier has processed acr
 
 - "Show only failed" filter, the failed-row visual indicator (color/icon), and the per-row Retry action specifically for failed classifications → Slice 012 (the Reclassify button shipped here can re-run a failed message and is not a retry-only surface; the dedicated retry affordance with batch semantics is Slice 012's job)
 - Batch reclassification (Settings → Reclassify tool, model override, date-range scope, decision diff calculator) → Slice 014
-- "Show only `other` from senders I've previously approved (in this account)" view → Slice 015 (uses sender stats)
+- "Show only `other` from senders I've previously approved (in this account)" view → Slice 015 (delivered there as a `from_previously_approved_sender` audit filter that JOINs to the `senders` table; uses sender stats)
 - Document-group display (siblings, "this also appears in N other emails") → Slice 013 (the Audit view here does not show grouping)
 - Inline editing of `processed_messages` fields → not planned (the row is a snapshot of the classifier's decision; corrections happen on the produced `documents` via Slice 008)
 - FTS5 full-text search over subjects/bodies → not planned for v1; substring `LIKE` is enough for the small corpora a single-user install accumulates

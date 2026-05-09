@@ -45,7 +45,10 @@ In Settings → Reclassify, I can pick one or several connected accounts, a mont
   - `src/server/sync/events.ts` (Slice 006) — pattern reused for the reclassify event emitter
   - `src/server/files.ts` (Slice 006)
   - `src/server/dedup/fingerprint.ts` (Slice 013)
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:**
   - Google OAuth + Gmail API access per account (Slice 002 + 003)
   - Ollama at `OLLAMA_URL` (Slice 005)
@@ -94,7 +97,7 @@ In Settings → Reclassify, I can pick one or several connected accounts, a mont
   - `src/client/components/AuditTable.tsx` (modified)
 - **External services:** —
 - **Other:**
-  - **User-edited fields preserved across reclassification.** When the reclassify orchestrator processes a message that already has `documents` rows, it does **not** overwrite those rows' `vendor` / `amount` / `currency` / `transaction_date` (or any other field). The new model's extracted values land in the appended `processed_messages` row only. New `documents` rows (created when reclassify produces a new artifact via Slice 010's path) get the new model's values, as they always have. This satisfies architecture's "user-edited fields preserved across reclassification" rule by simply not touching existing documents — and because Slice 008's `*_edited` flags already distinguish user-edited fields from model-extracted ones, a future "reset to model values" feature can decide per-field whether to overwrite.
+  - **User-edited fields preserved across reclassification.** When the reclassify orchestrator processes a message that already has `documents` rows, it does **not** overwrite those rows' `vendor` / `amount` / `currency` / `transaction_date` (or any other field). The appended `processed_messages` row records the new classification, confidence, reason, and `model_used`, but **not** the new model's extracted vendor/amount/currency/transaction_date — the table doesn't carry those columns (Slice 004 schema), and per-attempt persistence of extracted fields is intentionally deferred per `architecture.md` § "Reclassification" until a concrete use case (e.g. cross-model accuracy reporting) emerges. The new model's extracted values are surfaced in the live SSE diff (`reclassify.message` events) and the in-memory `GET /api/reclassify/diff/:job_id` endpoint, both of which last for the Node process's lifetime. New `documents` rows (created when reclassify produces a new artifact via Slice 010's path) get the new model's values at insert time, as they always have. Slice 008's `*_edited` flags already distinguish user-edited fields from model-extracted ones, so a future "reset to model values" feature can decide per-field whether to overwrite.
   - **Single shared job mutex across sync + reclassify.** A user can't accidentally start a reclassify while a sync is running, or two reclassifies at once. The Dashboard's "Sync now" button and this slice's "Run reclassification" button are mutually exclusive while either job is active.
 
 ## Out of scope
@@ -154,7 +157,7 @@ This slice realizes `architecture.md` § "Components — Frontend — Settings" 
 
 ## Implementation notes
 
-- **In-memory diff lost on restart.** Diffs live in the Node process for its lifetime. Persisting diffs would require a `reclassify_jobs` table (deferred). The append-only audit log preserves the underlying data, so the diff is reconstructible offline.
+- **In-memory diff lost on restart.** Diffs live in the Node process for its lifetime. Persisting diffs would require a `reclassify_jobs` table plus per-attempt extracted-field columns somewhere (deferred). The classification/confidence/reason transitions can be reconstructed from the append-only `processed_messages` log offline; the per-attempt vendor/amount/currency/transaction_date values cannot, since that schema doesn't carry those columns. If reconstruction matters, the user re-runs reclassify on the same scope.
 - **`model_disagrees` clear semantics.** Cleared on approve (user override) and on a subsequent reclassify back to receipt/invoice. Not cleared on reject — the flag describes the document's classification history regardless of the user's intent.
 - **No per-attempt linkage on documents.** Documents do not carry a pointer to the `processed_messages` row that produced them. Latest-attempt lookups via `MAX(id)` cover Review, Audit, and Export needs. A `documents.processed_message_id` column can be added later if per-attempt provenance is required.
 - **Mutex placement.** This slice promotes Slice 006's in-memory single-job mutex into `src/server/reclassify/job-mutex.ts`; sync imports from there. Slice 006's behavior is unchanged; only the location moves.

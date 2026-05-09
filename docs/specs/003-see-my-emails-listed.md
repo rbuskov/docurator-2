@@ -24,7 +24,9 @@ I can navigate to an "Inbox" page, pick any one of my connected Gmail accounts f
   - `src/server/index.ts`, `src/server/config.ts`, `src/server/api/` (Slice 001)
   - `src/server/auth/accounts.ts`, `src/server/auth/session.ts`, `src/server/auth/oauth.ts` (Slice 002)
   - `src/server/db/index.ts` (Slice 002) — read-only use here, just so the accounts repo has its connection
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts` (Slices 001/002)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
 - **External services:**
   - Google OAuth + Gmail API access for each connected account (Slice 002 produced the tokens; this slice is the first to make Gmail API calls)
 - **Other:** —

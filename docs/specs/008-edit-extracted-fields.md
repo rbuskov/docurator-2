@@ -34,7 +34,10 @@ When the classifier extracts the wrong vendor, amount, currency, or transaction 
   - `src/server/db/repositories/documents.ts` (Slice 006)
   - `src/server/db/repositories/review_actions.ts` (Slice 007)
   - `src/server/api/documents.ts` (Slice 006) — extended here with a PATCH route
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:** —
 - **Other:**
   - SQLite WAL + foreign-keys-on (Slice 004)
@@ -76,6 +79,7 @@ When the classifier extracts the wrong vendor, amount, currency, or transaction 
   - `src/server/api/documents.ts` — modified to register `PATCH /api/documents/:id` and to JOIN the new `*_edited` columns into the row shape returned by the existing `GET /api/accounts/:id/documents` and `GET /api/review/queue` endpoints. (Slice 007's `GET /api/review/queue` selector is updated locally to add the three flag columns.)
   - `src/client/components/EditableField.tsx`
   - `src/client/components/ReviewMetadata.tsx` (modified to host the editable fields)
+  - `src/client/hooks/useReviewKeyboard.ts` (modified, originally Slice 007) — adds the architecture-mandated `e` shortcut: when no input is focused, pressing `e` focuses the first `<EditableField>` in the metadata pane (vendor by default). Implementation: the hook now exposes a registration callback the metadata pane uses to surface its first editable input; the keyboard handler invokes the registered callback on `e`. Pressing `Escape` while editing reverts and blurs (Slice 008's existing `EditableField` behavior), which re-engages `a`/`r`/`j`/`k`.
   - `src/client/lib/currencies.ts` — small constant array of common ISO 4217 codes used by the currency field's allowlist hint
 - **External services:** —
 - **Other:**
@@ -116,6 +120,7 @@ This slice realizes `architecture.md` § "Components — Frontend — Review" ("
 - Focusing then blurring a field with no change writes nothing — `documents.updated_at` is unchanged, no new `review_actions` row is created, and the relevant `*_edited` flag stays at its prior value.
 - Submitting an invalid amount (e.g. typing `abc`) does not save: the field reverts on blur, no PATCH is sent, and no DB rows change.
 - Approving an edited document via `a` (Slice 007 shortcut) still works; the keyboard shortcut does not fire while a field is focused.
+- Pressing `e` on a Review-view document focuses the first editable field (vendor) per `architecture.md` § "Components — Frontend — Review". Pressing `Escape` from inside an editable field reverts the value (when changed), blurs, and re-engages the navigation shortcuts.
 - The Slice 007 queue ordering (confidence ASC) is unaffected by edits — editing a doc doesn't move it; the next pending document is still the next-lowest-confidence one.
 - A PATCH that hits a server error (e.g. a malformed request) shows the error chip on the field and reverts the optimistic value; the corresponding DB row remains unchanged.
 - `npm run check:gmail-readonly` (Slice 003 guard) still passes.

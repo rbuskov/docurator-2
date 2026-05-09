@@ -14,18 +14,33 @@ I could clone this repo, hand it to a freelancer friend with a personal and a bu
   - `documents` — including all Slice 006/008/014/015 columns (`vendor`, `amount`, `currency`, `transaction_date`, `*_edited`, `review_status`, `model_disagrees`, `auto_approved`)
   - `review_actions` (Slice 007), `senders` (Slice 007 / 015), `tags`, `document_tags` (Slice 009), `document_groups`, `document_group_members` (Slice 013)
 - **Migrations:**
-  - `0001`–`0015` (Slices 002–015)
+  - `0001`–`0016` (Slices 002–015; Slice 015 ships migrations 0014 / 0015 / 0016)
 - **API endpoints:**
-  - All endpoints from Slices 002–015 — extended here only for `notes` field on `PATCH /api/documents/:id`
+  - `GET /api/accounts` (Slice 002) — polled by the re-auth banner to detect `needs_reauth`
+  - `POST /api/accounts/:id/reconnect` (Slice 002) — invoked by the re-auth banner's button
+  - `GET /api/ollama/health` (Slice 005) — polled by the Ollama-down banner
+  - `GET /api/sync/events` (Slice 006) — listened to by `MidSyncReAuthHandler`
+  - `PATCH /api/documents/:id` (Slice 008) — extended here to accept the `notes` field
 - **UI views / components:**
-  - All views from Slices 001–015 — extended here with shared empty/loading/error patterns and a re-auth banner
+  - `Dashboard.tsx` (Slice 002) — adopts shared empty/loading/error components; hosts the Ollama-down banner
+  - `Inbox.tsx` (Slice 006) — adopts shared empty/loading/error components; surfaces a notes indicator on rows
+  - `Review.tsx` (Slice 007) — adopts shared empty/loading/error components
+  - `ReviewMetadata.tsx` (Slices 007 / 008 / 009 / 013 / 014 / 015) — extended with `<NotesField />` below the tag picker
+  - `Audit.tsx` (Slice 010) — adopts shared empty/loading/error components
+  - `Export.tsx` (Slice 011) — adopts shared empty/loading/error components
+  - `Settings.tsx` (Slice 009) — adopts shared empty/loading/error components
+  - `Nav.tsx` (Slices 003 / 007 / 009 / 010 / 011 / 012) — re-auth banner mounts above it via `App.tsx`
+  - `App.tsx` (Slice 001) — modified to mount `<ReAuthBanner />` and `<MidSyncReAuthHandler />` once at the app shell
+  - `OllamaHealth.tsx` (Slice 005) — extended into a banner variant when Ollama has been unreachable for >30s
 - **Background jobs / orchestrators:**
-  - Sync orchestrator (Slices 006 / 013 / 015), reclassify orchestrators (Slices 010 / 014 / 015)
+  - Sync orchestrator (Slice 006, extended in 013 and 015) — already emits `sync.error` events for token failures; this slice listens for them in the UI
+  - Reclassify orchestrators — single-row (Slice 010) and batch (Slice 014, extended in 015) — likewise already surface per-account errors
 - **Env vars / configuration:**
-  - All env vars from prior slices
+  - All env vars relevant to the empty/loading/error and re-auth surfaces are inherited from earlier slices; this slice introduces no new env vars.
 - **Files / modules:**
-  - All source from prior slices
   - `src/server/auth/session.ts` (Slice 002) — already raises `needs_reauth` per account; this slice surfaces it in the UI
+  - `src/server/db/repositories/documents.ts` (Slice 006, extended in 008 / 009 / 013 / 014 / 015) — extended here to accept `notes` in the update partial
+  - `src/server/api/documents.ts` (Slice 006, extended in 008 / 009 / 013 / 015) — extended here to add `notes` to the PATCH validator
   - `src/server/export/manifest.ts` (Slice 011) — extended here to populate the `notes` column from real data
 - **External services:**
   - Google OAuth + Gmail per account (Slice 002 + 003)
@@ -38,7 +53,7 @@ I could clone this repo, hand it to a freelancer friend with a personal and a bu
 - **DB tables / columns:**
   - `documents.notes` TEXT NOT NULL DEFAULT '' — freeform user notes attached during review. Empty string default so the export's manifest column (which Slice 011 already emits as empty) starts populating real data immediately on upgrade.
 - **Migrations:**
-  - `0016_add_documents_notes.sql` — single `ALTER TABLE documents ADD COLUMN notes TEXT NOT NULL DEFAULT ''`. No backfill needed.
+  - `0017_add_documents_notes.sql` — single `ALTER TABLE documents ADD COLUMN notes TEXT NOT NULL DEFAULT ''`. No backfill needed.
 - **API endpoints:**
   - `PATCH /api/documents/:id` (modification of Slice 008's endpoint) — extends the request body's Zod schema to accept `notes?: string` (max length 4000 chars). When provided and different from the current value, updates the column, sets `documents.updated_at`, and writes a `review_actions` row with `action='edited'` and `details={"field":"notes","from":"...","to":"..."}` — same pattern as Slice 008's other field edits. `notes` does not get a `*_edited` flag (it has no model-extracted baseline).
 - **UI views / components:**
@@ -55,7 +70,7 @@ I could clone this repo, hand it to a freelancer friend with a personal and a bu
 - **Background jobs / orchestrators:** —
 - **Env vars / configuration:** —
 - **Files / modules:**
-  - `src/server/db/migrations/0016_add_documents_notes.sql`
+  - `src/server/db/migrations/0017_add_documents_notes.sql`
   - `src/server/db/repositories/documents.ts` (modified) — `update` accepts `notes` in its partial; the same audit-row writer handles the new field.
   - `src/server/api/documents.ts` (modified) — extends the PATCH Zod validator with `notes`.
   - `src/server/export/manifest.ts` (modified) — emits `documents.notes` for the manifest's `notes` column instead of always empty (Slice 011 placeholder behavior). The CSV/Markdown serializers don't change since the column was already in the schema.
@@ -81,8 +96,8 @@ I could clone this repo, hand it to a freelancer friend with a personal and a bu
 - Multi-select tag filter on the Inbox (deferred from Slice 009) → still deferred; user can chain single-tag exports
 - AND-semantics tag filter on the Export (deferred from Slice 011) → still deferred
 - Tagging from the Inbox view (deferred from Slice 009) → still deferred
-- A "Disconnect / remove account" UI (deferred from Slice 002) → still deferred; users can remove an account by editing the DB or letting it stay in `needs_reauth` indefinitely.
-- Editing `display_name` from the UI (deferred from Slice 002) → still deferred
+- A "Disconnect / remove account" UI → not planned for v1 (Slice 002's Out of scope now records this; users can edit the DB or leave an account in `needs_reauth`).
+- Editing `display_name` from the UI → not planned for v1 (Slice 002's Out of scope now records this).
 - Edit history disclosure in the Review metadata pane (deferred from Slice 007) → still deferred
 - Undo toast for approve/reject (deferred from Slice 007) → still deferred
 - Freeform color picker for tags (deferred from Slice 009) → still deferred (palette swatches + hex input is enough)
@@ -90,8 +105,8 @@ I could clone this repo, hand it to a freelancer friend with a personal and a bu
 - Auto-cleanup of orphan `document_groups` rows (deferred from Slice 013) → still deferred
 - Per-attempt provenance column on `documents` (`processed_message_id` FK; flagged in Slices 006 / 014) → still deferred
 - Persisting reclassify diffs across container restarts (Slice 014) → still deferred
-- Settings → Accounts panel that consolidates Dashboard's accounts list + a "Disconnect" button → still deferred
-- Slice 006/007 JOIN cardinality cleanup (latest-`processed_messages`-row pattern explicit in their queries) → still deferred; the queries function correctly today as long as reclassification is rare; if reclassification becomes routine before this is fixed, duplicate rows in those listings may surface.
+- A Settings → Accounts panel separate from the Dashboard → not planned for v1 (the Dashboard is the canonical accounts surface per `architecture.md` § "Components — Frontend").
+- (Slice 006/007 JOIN cardinality cleanup is no longer pending: those slices now use the same most-recent-`processed_messages`-row subquery pattern Slice 011 uses, so reclassification does not multiply rows in the Inbox or Review queue listings.)
 - A polished "screenshots automation" pipeline → not planned; screenshots in the README are captured manually and committed under `docs/screenshots/`
 
 ## Detailed design
@@ -138,4 +153,4 @@ This slice's purpose is *delivering*: the prior 15 slices ship working code; thi
 - **Empty-state copy.** The shipped copy is a starting point; iterating with real-user feedback is expected.
 - **Many smaller deferrals.** The Out-of-scope list intentionally prioritizes self-service adoption (README, error states, re-auth UX, notes column). Remaining items can ship as follow-up slices.
 - **No automated tests in this slice.** Test infrastructure is not a Slice 016 deliverable; the implementation pass adds tests alongside the code it touches.
-- **Slice 006/007 JOIN-cardinality cleanup.** Not addressed here. If reclassification becomes routine before the cleanup, Inbox and Review queue listings may show duplicate rows for reclassified documents.
+- **Slice 006/007 JOIN-cardinality cleanup.** Not needed in this slice — Specs 006 and 007 already specify the most-recent-`processed_messages`-row subquery pattern in their queue/listing JOINs, matching Spec 011's export.

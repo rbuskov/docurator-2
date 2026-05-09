@@ -23,7 +23,7 @@ I can open the Review view, see captured receipts from all my connected accounts
   - `GET /api/documents/:id/file` (Slice 006) — drives the preview pane
 - **UI views / components:**
   - `Dashboard.tsx` at `/` (Slice 002)
-  - `Inbox.tsx` at `/inbox` (Slice 006) — unchanged here; this slice adds a parallel `/review` surface
+  - `Inbox.tsx` at `/inbox` (Slice 003, data source replaced by Slice 006) — unchanged here; this slice adds a parallel `/review` surface
   - `Nav.tsx`, `AccountPicker.tsx` (Slice 003)
 - **Background jobs / orchestrators:**
   - Sync orchestrator (Slice 006) — produces the `documents` rows this slice triages
@@ -33,7 +33,10 @@ I can open the Review view, see captured receipts from all my connected accounts
   - `src/server/index.ts`, `src/server/config.ts`, `src/server/api/` (Slice 001)
   - `src/server/db/index.ts`, `src/server/db/migrate.ts`, `src/server/db/migrations/` (Slices 002 / 004)
   - `src/server/db/repositories/documents.ts` (Slice 006), `src/server/db/repositories/processed_messages.ts` (Slice 004)
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:** —
 - **Other:**
   - SQLite WAL + foreign-keys-on (Slice 004)
@@ -90,7 +93,8 @@ I can open the Review view, see captured receipts from all my connected accounts
 ## Out of scope
 
 - Inline editing of `vendor` / `amount` / `currency` / `transaction_date` in the metadata pane → Slice 008
-- The `vendor_edited` / `amount_edited` / `date_edited` boolean columns and a `notes` column on `documents` → Slice 008
+- The `vendor_edited` / `amount_edited` / `date_edited` boolean columns on `documents` → Slice 008
+- A `notes` column on `documents` and the notes textarea in the metadata pane → Slice 016 (Slice 008 ships only the `*_edited` flags + inline editing for the model-extracted fields)
 - Tag picker in the metadata pane and `tags` / `document_tags` tables → Slice 009
 - Cross-account Audit view, "Open in Gmail" deep links, Reclassify-from-row → Slice 010
 - Export → Slice 011
@@ -104,7 +108,7 @@ I can open the Review view, see captured receipts from all my connected accounts
 
 This slice realizes `architecture.md` § "Components — Frontend — Review" and § "Key flows — Review" for the approve/reject path. It deliberately stops short of inline field edits (Slice 008) and tagging (Slice 009) so each behavior can be added without rewriting the surrounding view.
 
-- **Queue semantics.** The queue is "everything still pending review across all connected accounts, ordered by confidence ascending so the riskiest items surface first." The custom rank `low=0, medium=1, high=2, NULL=3` is implemented inline in the SQL (`ORDER BY CASE confidence WHEN 'low' THEN 0 WHEN 'medium' THEN 1 WHEN 'high' THEN 2 ELSE 3 END, internal_date ASC, documents.id ASC`). Confidence comes from `processed_messages` via JOIN — `documents` itself doesn't carry confidence. NULL confidence is unusual (only failed messages have NULL, and failed messages don't produce documents) but the rank covers it for completeness.
+- **Queue semantics.** The queue is "everything still pending review across all connected accounts, ordered by confidence ascending so the riskiest items surface first." The custom rank `low=0, medium=1, high=2, NULL=3` is implemented inline in the SQL (`ORDER BY CASE confidence WHEN 'low' THEN 0 WHEN 'medium' THEN 1 WHEN 'high' THEN 2 ELSE 3 END, internal_date ASC, documents.id ASC`). Confidence comes from `processed_messages` via JOIN — `documents` itself doesn't carry confidence. The JOIN is filtered to the **latest attempt** per `(account_id, message_id)` via `pm.id = (SELECT MAX(id) FROM processed_messages WHERE account_id = d.account_id AND message_id = d.message_id)`, since `processed_messages` is append-only (Slice 004) and would otherwise multiply rows once reclassification (Slices 010 / 014) appends new attempts. NULL confidence is unusual (only failed messages have NULL, and failed messages don't produce documents) but the rank covers it for completeness.
 - **Account filtering.** Default scope is all `connected` accounts. The picker is the same `AccountPicker` from Slice 003, with an extra "All accounts" option at the top. Selecting a single account narrows the queue and the badge in the nav.
 - **Atomicity.** Approve/reject are atomic transactions: `UPDATE documents SET review_status, updated_at`, `INSERT INTO review_actions`, `INSERT … ON CONFLICT … DO UPDATE` on `senders`. If any step fails, the transaction rolls back and the UI sees an error chip; the queue position does not advance.
 - **`senders` upsert.** First time a `(account_id, domain)` pair is seen, the row is created with the relevant counter at 1 and the other at 0. Subsequent actions increment one or the other. `last_seen_at` is updated on every action. Slice 015 will read these counts to drive auto-skip/auto-flag; this slice only produces them.

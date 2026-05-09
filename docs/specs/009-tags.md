@@ -37,7 +37,10 @@ I can apply install-wide tags (starting with `business` and `personal`, plus any
   - `src/server/db/repositories/documents.ts` (Slices 006 / 008)
   - `src/server/db/repositories/review_actions.ts` (Slice 007)
   - `src/server/api/documents.ts` (Slices 006 / 008) — extended with two tag-link routes here
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:** —
 - **Other:**
   - SQLite WAL + foreign-keys-on (Slice 004)
@@ -68,7 +71,7 @@ I can apply install-wide tags (starting with `business` and `personal`, plus any
   - `DELETE /api/documents/:id/tags/:tag_id` → mirrors POST: deletes the link (no-op + HTTP 200 if no link existed), updates `documents.updated_at`, appends a `review_actions` row with `details.verb='removed'`. Returns the updated tag list.
   - The existing `GET /api/accounts/:id/documents` (Slice 006) and `GET /api/review/queue` (Slice 007) row shapes are extended to include `tags: Array<{ id, name, color }>` per row. Implementation: a single `GROUP_CONCAT` JOIN per query, parsed server-side into the array shape. (Slice 008's `*_edited` flags addition was the first additive shape change; this is the second.)
 - **UI views / components:**
-  - `Settings.tsx` — at route `/settings`. Top-level shell with a left-rail of sections; for now the only populated section is "Tags". Other sections (Accounts, Ollama, Senders, Fiscal year) are forward-declared as disabled menu items pointing at the slices that will fill them (007, 005, 015, 011 respectively). The shell is the surface future Settings-touching slices will plug into.
+  - `Settings.tsx` — at route `/settings`. Top-level shell with a left-rail of sections; for now the only populated section is "Tags". The remaining v1 Settings sections — Senders and Fiscal year — are forward-declared as disabled menu items pointing at the slices that will fill them (Senders → Slice 015, Fiscal year → Slice 011). Account management (add/reconnect) lives on the Dashboard per `architecture.md` § "Components — Frontend"; Ollama config is env-var-driven (no Settings section). The shell is the surface future Settings-touching slices will plug into.
   - `TagManager.tsx` — the Settings → Tags section. Lists all tags with `{ name, color swatch, document_count, edit, delete }`. Edit opens a small inline form (rename + color picker). Delete confirms ("Removing the `client:acme` tag will unlink it from N receipts. The receipts themselves are not deleted.").
   - `TagPicker.tsx` — typeahead combobox used by the Review view. Shows applied tags as removable chips on top, an input below; typing filters existing tags; pressing Enter on an unrecognized name offers a "Create `<name>`" affordance that calls `POST /api/tags` then `POST /api/documents/:id/tags`. Bound into `ReviewMetadata.tsx` below the editable fields.
   - `TagChip.tsx` — reusable rendered tag (color dot + name). Used by the picker, the Inbox list, and the Audit view (Slice 010 will reuse).
@@ -144,4 +147,4 @@ This slice realizes `architecture.md` § "Storage" (the `tags` and `document_tag
 - **`TagChip` reuse.** Used in Review picker, Inbox column, and the Slice 010 Audit view.
 - **`GROUP_CONCAT` parsing.** Uses ASCII unit-separator (`\x1f`) inside `GROUP_CONCAT` so tag names containing `,` or `;` parse correctly.
 - **Tag-color uniqueness.** Not enforced. Two tags can share a color; the name disambiguates.
-- **Settings shell forward-declaring sections.** Sections owned by Slices 005/007/011/015 ship as disabled menu items here so each later slice slots in without restructuring the shell.
+- **Settings shell forward-declaring sections.** Disabled menu items for Senders (Slice 015) and Fiscal year (Slice 011) ship in this slice so each later slice slots in without restructuring the shell. Account management and Ollama config are not Settings sections in v1 (see `architecture.md` § "Components — Frontend") — Dashboard handles accounts; env vars + the Dashboard health badge handle Ollama.

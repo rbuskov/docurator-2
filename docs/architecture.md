@@ -37,7 +37,13 @@ This document covers how that's built.
 
 This is a strict, auditable property of the application: **the app never writes to any connected Gmail account, in any form, under any circumstance.** The guarantee applies uniformly to every account the user connects.
 
-**OAuth scope.** Per account, the app requests **only** `https://www.googleapis.com/auth/gmail.readonly`. It does not request `gmail.modify`, `gmail.labels`, `gmail.send`, `gmail.compose`, `gmail.insert`, `gmail.metadata`, or any other scope. Google's consent screen will display "Read your email messages and settings" and nothing more, on every account-add flow. If the consent screen ever shows a write-related permission, the app has a bug and the user should refuse consent.
+**OAuth scopes.** Per account, the app requests three scopes and only these three:
+
+- `https://www.googleapis.com/auth/gmail.readonly` — the only Gmail-touching scope. Read access to messages and metadata; no write capability of any kind.
+- `openid` — needed for OAuth identity (the ID token returned by Google).
+- `https://www.googleapis.com/auth/userinfo.email` — needed so the OAuth callback can identify *which* Google account just authenticated, and key the local `accounts` row by that email address.
+
+The app does **not** request `gmail.modify`, `gmail.labels`, `gmail.send`, `gmail.compose`, `gmail.insert`, `gmail.metadata`, or any other Gmail scope. Google's consent screen will display "Read your email messages and settings" plus "See your primary Google Account email address" on every account-add flow — and nothing more. If the consent screen ever shows a write-related permission, the app has a bug and the user should refuse consent. The two identity scopes (`openid`, `userinfo.email`) are part of the OAuth handshake itself; they grant access to the user's email address only, never to any Gmail data.
 
 **No write API calls.** The application code uses only the read endpoints of the Gmail API: `users.messages.list`, `users.messages.get`, `users.history.list`, `users.threads.get`, and `users.attachments.get`. Calls to `users.messages.modify`, `users.messages.trash`, `users.messages.delete`, `users.labels.create`, `users.labels.delete`, `users.drafts.*`, and `users.messages.send` are not present in the codebase. This should be enforced by code review and ideally by a lint rule or test that fails the build if a write endpoint is referenced.
 
@@ -128,13 +134,13 @@ One container, two stable host volumes, two outbound dependencies (Gmail — pos
 
 Five primary views:
 
-- **Dashboard** — list of connected Gmail accounts (each with its own status, last sync time, and per-account counts), Ollama reachable? which model?, aggregate counts across all accounts (this month: N processed, M receipts found, K pending review, J failed), an "Add Gmail account" button, and a "Sync now" button that syncs all connected accounts (or a chosen subset).
-- **Inbox** — pending receipts awaiting review, sorted by confidence ascending. Each row shows the originating account. Filters: account, date range, confidence, tag.
-- **Review** — side-by-side document preview (PDF via `react-pdf`, images natively, rendered email body as PDF) with classification metadata, the originating account, **editable extracted fields** (vendor, amount, currency, transaction date), **tags**, and a **notes** field. Approve/reject buttons. Keyboard shortcuts (`a` approve, `r` reject, `j`/`k` navigate, `e` focus first editable field). Shows duplicate group members if any.
+- **Dashboard** — list of connected Gmail accounts (each with its own status, last sync time, and per-account counts surfaced live during a sync), an Ollama health badge ("reachable? which model?"), an "Add Gmail account" button, and a "Sync now" button that syncs all connected accounts (or a chosen subset). Cross-account aggregate "this month" counters (processed / receipts / pending / failed) are not v1 — the per-account live counters during a sync, the Audit view (Slice 010), and the unresolved-failure badge in the Nav (Slice 012) cover the immediate "what's going on?" need without a separate aggregate query path.
+- **Inbox** — per-account list of every captured `documents` row, sorted by `created_at` descending (most recently captured first). Account picker, plus filters (date range, confidence, tag, review status). The Inbox is a *documents browser*; the curated triage queue lives in the Review view.
+- **Review** — the pending-receipts queue, drawn cross-account by default and ordered by confidence ascending so the riskiest items surface first. Side-by-side document preview (PDF via `react-pdf`, images natively, rendered email body as PDF) with classification metadata, the originating account, **editable extracted fields** (vendor, amount, currency, transaction date), **tags**, and a **notes** field. Approve/reject buttons. Keyboard shortcuts (`a` approve, `r` reject, `j`/`k` navigate, `e` focus first editable field). Shows duplicate group members if any.
 - **Audit** — table of all processed emails across all connected accounts (whether classified as receipt or not, **including failures**), with account, sender, subject, classification result, confidence, model used, and a deep-link "Open in Gmail" button (that opens the message in the *correct* account — see "Audit / double-check"). Filters: account, classification, confidence, date range, sender, **status (success / failed)**, free-text search on subject. Each row has a "Reclassify" action. This is the main "double-check" surface and is essential for catching false negatives.
 - **Export** — account selector (one, several, or all), month-based period selector (single month, month range, quarter, fiscal year) with **presets** ("Last month," "This quarter," "Last quarter," "FY2026"), tag filters, live preview of what the export will contain, "Download zip + manifest" button.
 
-A **settings** panel covers connected accounts (add, remove, re-auth a specific account), Ollama endpoint and model selection, sender allowlist/blocklist editor (scoped per account), tag management (shared across accounts), fiscal-year start configuration (calendar year vs custom, applies to all accounts), and a "re-classify date range with current model" tool (per-account or all).
+A **settings** panel covers tag management (shared across accounts), sender allowlist/blocklist editor (scoped per account), fiscal-year start configuration (calendar year vs custom, applies to all accounts), and a "re-classify date range with current model" tool (per-account or all). Account management (add account, reconnect a `needs_reauth` account) lives on the Dashboard since the user is already there to look at sync status; a "Disconnect" action is intentionally not in v1 (users can edit `data/app.db` to drop a row, or just leave a stale account in `needs_reauth`). Ollama endpoint and model selection are configured via the `OLLAMA_URL` and `OLLAMA_MODEL` env vars; the Dashboard Ollama-health badge surfaces reachability and model availability without a Settings UI.
 
 ### Backend — Node.js
 
@@ -186,9 +192,10 @@ If classification fails (Ollama unreachable, malformed input, JSON parse error, 
   - `status` (`connected` / `needs_reauth` — set on refresh-token failure; cleared on successful re-auth)
   - **No tokens stored here.** Tokens live in process memory only, keyed by `accounts.id`.
 
-- `processed_messages` — append-only audit log
+- `processed_messages` — append-only audit log; no DB-level uniqueness on `(account_id, message_id)` because reclassification appends a fresh row per attempt. Idempotency for sync (one row per message per sync run) is enforced at the application layer via a "has this been processed?" check inside the per-message transaction.
+  - `id` (surrogate primary key — used as the join target for any future per-attempt FK)
   - `account_id` (FK to `accounts.id`)
-  - `message_id` (Gmail's ID; unique within an account, **so the unique constraint is `(account_id, message_id)`**)
+  - `message_id` (Gmail's ID; unique within an account but **not** uniquely indexed here — multiple rows per `(account_id, message_id)` accumulate as classification history)
   - `thread_id`
   - `internal_date` (Gmail's `internalDate`)
   - `processed_at`
@@ -205,7 +212,7 @@ If classification fails (Ollama unreachable, malformed input, JSON parse error, 
 - `documents` — one row per stored receipt/invoice
   - `id`
   - `account_id` (FK to `accounts.id` — denormalized from `processed_messages` for query convenience and to keep account-scoped indices fast)
-  - `message_id` (together with `account_id`, FK to `processed_messages`)
+  - `message_id` (Gmail's message id; plain TEXT, not an FK — `processed_messages` has no unique key on `(account_id, message_id)` to target. The pairing of `documents` and `processed_messages` rows that came from the same sync attempt is enforced at the application layer via a single transaction. A future `documents.processed_message_id INTEGER REFERENCES processed_messages(id)` column can pin per-attempt provenance when needed.)
   - `kind` (`attachment` / `rendered_body`)
   - `filename`
   - `mime_type`
@@ -296,7 +303,7 @@ If the refresh token is revoked mid-session for any one account, the next Gmail 
 
 ### Sync (manual trigger)
 
-1. UI calls backend `POST /sync` with optional date range and an optional list of `account_ids` (default: all connected accounts in `status = connected`)
+1. UI calls backend `POST /api/sync` with optional date range and an optional list of `account_ids` (default: all connected accounts in `status = connected`). All application API routes are mounted under `/api/...`; the only non-prefixed backend path is `/oauth/callback`, which Google redirects to.
 2. Backend iterates the selected accounts. For each account:
    a. Determine the message set, using that account's row in `sync_state`:
       - If the account's `last_history_id` exists and no explicit range: incremental via History API
@@ -358,10 +365,10 @@ User selects a date range, optionally one or more accounts (default: all), and a
 2. For each, re-fetches from the originating Gmail account (using that account's tokens) and re-runs the classifier with the new model
 3. Appends a new `processed_messages` row each time, preserving `account_id` (decisions are append-only — older decisions remain visible in the audit log so you can see how a model's behavior changed over time)
 4. If the new decision differs from the previous one:
-   - If "was other, now receipt" → store the document as usual; surface for review
-   - If "was receipt, now other" → soft-flag the existing document with a "model now disagrees" indicator; don't auto-delete (let the user decide)
-   - User-edited fields are preserved across reclassification — the new model's extracted values are stored separately, and the user keeps their corrections
-5. Show a summary diff: "47 messages re-classified, 3 changed to receipt, 1 changed away from receipt, 0 failed"
+   - If "was other, now receipt" → store the document as usual; surface for review. The new artifact is created with the new model's extracted `vendor`/`amount`/`currency`/`transaction_date` (subject to hard-dedup against existing files); existing `documents` rows for prior attempts of the same message are not modified.
+   - If "was receipt, now other" → soft-flag the existing document with a "model now disagrees" indicator (`documents.model_disagrees=1`); don't auto-delete (let the user decide).
+   - User-edited fields are preserved across reclassification — existing `documents` rows are never overwritten, so the user keeps their corrections. The new model's extracted values are surfaced in the live reclassify diff (per-job, in-process) but are **not** persisted per-attempt in v1; the underlying `processed_messages` row records the new classification, confidence, reason, and model used, but not the four extracted fields. Per-attempt persistence of extracted fields is a v1+1 addition once the use case (e.g. cross-model accuracy reporting) emerges.
+5. Show a summary diff: "47 messages re-classified, 3 changed to receipt, 1 changed away from receipt, 0 failed". The diff lives in process memory for the lifetime of the Node process; after a container restart the user re-runs reclassify if they want to see it again.
 
 This makes "try a better model" a first-class operation, not a destructive one.
 
@@ -480,22 +487,37 @@ docurator/
 │   │   │   ├── accounts.ts      # accounts repository (CRUD on `accounts`)
 │   │   │   └── session.ts       # in-memory token store, keyed by account_id
 │   │   ├── gmail/
-│   │   │   ├── client.ts        # Gmail API wrapper (constructed per account)
-│   │   │   └── sync.ts          # sync orchestration (iterates accounts)
+│   │   │   └── client.ts        # Gmail API wrapper (constructed per account; read-only methods only)
+│   │   ├── sync/
+│   │   │   ├── orchestrator.ts  # iterates accounts; runs the per-message pipeline
+│   │   │   ├── events.ts        # SSE event emitter + ring buffer
+│   │   │   └── reclassify.ts    # per-message reclassify wrapper (used by single-row + batch)
+│   │   ├── reclassify/
+│   │   │   ├── batch.ts         # batch orchestrator (Slice 014)
+│   │   │   ├── transitions.ts   # pure transition-kind computation
+│   │   │   ├── diff.ts          # in-memory per-job diff builder
+│   │   │   └── job-mutex.ts     # shared single-job mutex used by sync + reclassify
 │   │   ├── classify/
 │   │   │   ├── index.ts         # pipeline
 │   │   │   ├── ollama.ts        # Ollama HTTP client
 │   │   │   ├── prompt.ts        # the classification prompt
-│   │   │   └── render.ts        # HTML body → PDF (Playwright)
+│   │   │   ├── extract-body.ts  # MIME-tree walk → plain text
+│   │   │   ├── render-pdf.ts    # PDF → page images (vision-model input)
+│   │   │   ├── render-html-pdf.ts # HTML body → PDF (Playwright; Slice 006)
+│   │   │   └── schema.ts        # Zod schemas for Ollama response
 │   │   ├── dedup/
-│   │   │   ├── hash.ts
-│   │   │   └── fingerprint.ts
+│   │   │   └── fingerprint.ts   # vendor/amount/currency/date → SHA-256 fingerprint
+│   │   ├── sender-memory/
+│   │   │   ├── listing.ts       # allow/block listing lookup
+│   │   │   └── auto-approve.ts  # heuristic decision function
 │   │   ├── db/
 │   │   │   ├── index.ts         # better-sqlite3 setup
-│   │   │   └── migrations/
-│   │   ├── files.ts             # file store
-│   │   ├── export.ts            # zip streaming
-│   │   └── api/                 # HTTP routes
+│   │   │   ├── migrate.ts       # migration runner
+│   │   │   ├── migrations/      # *.sql files applied in lexical order
+│   │   │   └── repositories/    # one module per table — account-scoped methods on prepared statements
+│   │   ├── files.ts             # file store; computes content-hash for hard dedup as a side effect of writing
+│   │   ├── export/              # zip streaming + manifest builders
+│   │   └── api/                 # HTTP routes (all under `/api/...` except `/oauth/callback`)
 │   └── client/                  # React frontend
 │       ├── main.tsx
 │       ├── App.tsx

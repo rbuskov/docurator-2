@@ -41,7 +41,10 @@ After approving several Stripe receipts in my business inbox, the next sync auto
   - `src/server/sync/orchestrator.ts` (Slices 006 / 013) — extended here
   - `src/server/sync/reclassify.ts` (Slices 010 / 013 / 014) — extended here
   - `src/server/api/review.ts` (Slices 007 / 014)
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:**
   - Google OAuth + Gmail API access per account (Slice 002 + 003)
   - Ollama at `OLLAMA_URL` (Slice 005)
@@ -56,10 +59,12 @@ After approving several Stripe receipts in my business inbox, the next sync auto
 - **Migrations:**
   - `0014_add_senders_listing.sql` — `ALTER TABLE senders ADD COLUMN listing TEXT NULL CHECK (listing IS NULL OR listing IN ('allow','block'))`. No data migration needed; existing senders rows default to NULL.
   - `0015_add_documents_auto_approved.sql` — `ALTER TABLE documents ADD COLUMN auto_approved INTEGER NOT NULL DEFAULT 0`. No backfill: pre-Slice-015 docs were either user-approved (review_status='approved' with `auto_approved=0` is the correct historical truth) or pending/rejected.
+  - `0016_extend_review_actions_action_enum.sql` — extends Slice 007's CHECK constraint on `review_actions.action` from `('approved','rejected','edited','tagged')` to `('approved','rejected','edited','tagged','listing_changed')`. SQLite doesn't support `ALTER TABLE ... DROP CONSTRAINT`, so this migration runs the standard create-new-table / `INSERT INTO new SELECT * FROM old` / drop-old / rename dance. Wrapped in a single transaction.
 - **API endpoints:**
   - `GET /api/accounts/:id/senders?limit=&offset=&listing=&q=` → response `{ rows: Array<{ domain, approved_count, rejected_count, last_seen_at, listing, document_count }>, total: number }`. `listing` filter accepts `'all' | 'allow' | 'block' | 'none'` (default `'all'`). `q` is a free-text substring filter on `domain`. `document_count` is computed via JOIN to `documents` for the "in N receipts" hint in the manager. Default sort: `last_seen_at DESC NULLS LAST` (most recently seen senders first).
   - `PATCH /api/accounts/:id/senders/:domain` → request body `{ listing: 'allow' | 'block' | null }` (Zod-validated). Updates the row (creates it if missing — a user can pre-emptively blocklist a domain that hasn't appeared yet). Returns the updated row. Idempotent on repeats. Inserts a `review_actions` row with `action='listing_changed'` and `details = { domain, prior_listing, new_listing }` for auditability; see Implementation notes for the `review_actions` enum extension.
   - `POST /api/accounts/:id/senders/bulk-listing` → request body `{ domains: string[], listing: 'allow' | 'block' | null }`. Convenience endpoint for the manager's multi-select. Single transaction.
+  - `GET /api/audit` (modification of Slice 010's endpoint) — adds an optional `from_previously_approved_sender` boolean query param. When `true`, the audit query JOINs `senders` on `(account_id, sender_domain=domain)` and filters to rows where `senders.approved_count > 0` for that `(account_id, domain)`. Combined with `classification=other`, this realizes architecture.md's "Show only `other` from senders I've previously approved (in this account)" key view from `architecture.md` § "Key flows — Audit / double-check". The filter is account-scoped via the existing `account_id` filter so signals don't cross accounts. Combinable with all other Slice 010/012 audit filters.
 - **UI views / components:**
   - `SenderManager.tsx` — Settings → Senders section. Top: account dropdown (single-select, defaults to most-recently-used). Body: a paginated table with columns `Domain`, `Approved`, `Rejected`, `Last seen`, `Documents`, `Listing` (a small select with options `auto`, `allow`, `block`); a search box at the top filters by domain substring. Multi-select checkboxes plus a bulk-action bar ("Allowlist selected", "Blocklist selected", "Clear listing on selected") drive `POST /api/accounts/:id/senders/bulk-listing`.
   - `AutoApprovedBadge.tsx` — small label rendered next to documents with `auto_approved=1`. Tooltip: "Approved automatically by sender memory ({reason: allowlist | trust threshold})". Reused in `Review` (rare, since auto-approved docs aren't pending), `Inbox` (visible there with `review_status='approved'`), and `AuditTable`.
@@ -68,6 +73,7 @@ After approving several Stripe receipts in my business inbox, the next sync auto
   - `Review.tsx`, `ReviewMetadata.tsx` (modified) — render `<AutoApprovedBadge />` when applicable; the badge is rare in the review queue (auto-approved docs are filtered out of pending), but appears when a user navigates back via `k` to a previously auto-approved doc.
   - `Inbox.tsx` (modified) — renders `<AutoApprovedBadge />` on rows; lets the user filter to "auto-approved" via an extra checkbox in the toolbar (defaults off).
   - `AuditTable.tsx` (modified) — renders `<AutoApprovedBadge />` on relevant rows; renders auto-skipped rows with the muted styling and the special model-used cell.
+  - `AuditFilters.tsx` (modified, originally Slice 010 / 012) — adds a "From sender I've approved before (this account)" preset checkbox that sets `?from_previously_approved_sender=true&classification=other`. Surfaces architecture.md's "Show only `other` from senders I've previously approved" key view as a one-click filter. Disabled when no account is selected (the filter is meaningful per-account).
 - **Background jobs / orchestrators:**
   - Sync orchestrator (modified) — for each message, after extracting `sender_domain` and before calling the classifier:
     1. Look up the message's sender row via `senders.get({ account_id, domain })`. If the row's `listing='block'`, skip classification: append a `processed_messages` row with `status='success'`, `classification='other'`, `confidence='high'`, `model_used='auto-block'`, `reason='sender on blocklist'`, plus the standard `account_id`, `message_id`, `sender_domain`, `subject`, `internal_date`, `processed_at`. No `documents` row. Emit the `sync.message` event with the special status. Continue.
@@ -80,7 +86,7 @@ After approving several Stripe receipts in my business inbox, the next sync auto
   - `AUTO_APPROVE_REQUIRES_HIGH_CONFIDENCE` (default `true`) — if true, the heuristic only fires when the classifier's confidence is `'high'`. If false, `'medium'` and `'high'` both qualify.
   - `docker-compose.yml` updated to pass through the three new env vars.
 - **Files / modules:**
-  - `src/server/db/migrations/0014_add_senders_listing.sql`, `0015_add_documents_auto_approved.sql`
+  - `src/server/db/migrations/0014_add_senders_listing.sql`, `0015_add_documents_auto_approved.sql`, `0016_extend_review_actions_action_enum.sql`
   - `src/server/db/repositories/senders.ts` (modified) — `setListing({ account_id, domain, listing })`, `bulkSetListing({ account_id, domains, listing })`, `listForAccount({ account_id, limit, offset, listing, q })` (extended). The Slice 007 increment methods are unchanged.
   - `src/server/db/repositories/documents.ts` (modified) — `insertWithAutoApproval` variant returning the new id along with `auto_approved` set as appropriate; existing `insert` is unchanged. Repository methods that surface document rows (Inbox listing, Review queue, Audit JOIN, Export select) are extended to include `auto_approved` in their projections.
   - `src/server/sender-memory/listing.ts` — `lookupListing({ account_id, domain }) → 'allow' | 'block' | null` thin wrapper around `senders.get`.
@@ -88,6 +94,8 @@ After approving several Stripe receipts in my business inbox, the next sync auto
   - `src/server/sync/orchestrator.ts` (modified) — wires the listing pre-check and the auto-approve post-check into the existing per-message transaction.
   - `src/server/sync/reclassify.ts` (modified) — same wiring for the reclassify path; explicit comment that blocklist is bypassed for reclassify.
   - `src/server/api/senders.ts` — registers `GET /api/accounts/:id/senders`, `PATCH /api/accounts/:id/senders/:domain`, `POST /api/accounts/:id/senders/bulk-listing`.
+  - `src/server/api/audit.ts` (modified) — adds the `from_previously_approved_sender` query param to the `GET /api/audit` Zod validator and threads it through `listAudit`.
+  - `src/server/db/repositories/processed_messages.ts` (modified) — `listAudit` accepts the new filter and adds a `JOIN senders ON senders.account_id = pm.account_id AND senders.domain = pm.sender_domain WHERE senders.approved_count > 0` clause when present (LEFT JOIN with `senders.approved_count > 0` predicate so missing-sender rows are excluded).
   - `src/server/api/review.ts` (modified) — Slice 007's approve handler clears `auto_approved=0` when a user manually approves an already-auto-approved document; the reject handler likewise clears `auto_approved=0` (a manual reject overrides the auto-approval). Both inserts a corrective `review_actions` row recording the override.
   - `src/client/views/SenderManager.tsx`, `src/client/components/AutoApprovedBadge.tsx`, `src/client/components/AutoSkippedRow.tsx`
   - `src/client/views/Settings.tsx` (modified)
@@ -146,7 +154,7 @@ This slice realizes `architecture.md` § "Components — Frontend — Settings" 
 
 ## Implementation notes
 
-- **Extending `review_actions.action` CHECK constraint.** SQLite doesn't support `ALTER TABLE ... DROP CONSTRAINT`. Migration `0014_add_senders_listing.sql` runs the standard create-new-table/copy/drop/rename dance to extend the action enum to `('approved','rejected','edited','tagged','listing_changed')`.
+- **Extending `review_actions.action` CHECK constraint.** SQLite doesn't support `ALTER TABLE ... DROP CONSTRAINT`. Migration `0016_extend_review_actions_action_enum.sql` runs the standard create-new-table/copy/drop/rename dance to extend the action enum to `('approved','rejected','edited','tagged','listing_changed')`.
 - **Auto-approve threshold defaults.** `AUTO_APPROVE_THRESHOLD=5`, `AUTO_APPROVE_MAX_REJECTIONS=0`, `AUTO_APPROVE_REQUIRES_HIGH_CONFIDENCE=true`. All env-var tunable; defaults err on the side of conservative auto-approval.
 - **Heuristic doesn't learn from auto-approvals.** Intentional, to avoid runaway feedback. A sender's `approved_count` stays put once auto-approve takes over; only genuine user actions move the counters.
 - **Allowlist doesn't skip Ollama.** Classification still runs on allowlisted senders so vendor/amount/currency/transaction_date are populated for the export manifest. The auto-approval applies to the result, not to skipping classification.

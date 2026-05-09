@@ -59,7 +59,7 @@ This slice exists mainly to prove Gmail integration works (per account) and to d
 
 - SQLite + better-sqlite3 setup, WAL mode
 - Migration runner
-- First migration: `processed_messages` (with `account_id` FK and `(account_id, message_id)` unique constraint), `sync_state` (one row per `account_id`), `app_config` tables. The `accounts` table itself was created in Slice 2; this slice adds the tables that reference it.
+- First migration: `processed_messages` (with `account_id` FK; append-only, no DB-level unique constraint on `(account_id, message_id)` because reclassification appends new rows — idempotency is enforced in application code), `sync_state` (one row per `account_id`), `app_config` tables. The `accounts` table itself was created in Slice 2; this slice adds the tables that reference it.
 - Bind-mounted `./data` volume
 - Repository layer for these tables (every read/write is account-scoped)
 - Manual "Mark first 10 messages as processed for account X" button on the dev UI to verify the round-trip across accounts

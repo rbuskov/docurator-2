@@ -27,7 +27,10 @@ I can pick a connected Gmail account on a Dashboard "Dev tools" panel, click "Ma
   - `src/server/db/index.ts`, `src/server/db/migrate.ts`, `src/server/db/migrations/` directory (Slice 002 — the SQLite connection, the migration runner, and the migrations folder all already exist; this slice adds new migration files inside it and modifies `src/server/db/index.ts` to enable WAL)
   - `src/server/auth/accounts.ts` (Slice 002)
   - `src/server/gmail/client.ts` (Slice 003)
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
   - `data/.gitkeep` (Slice 002)
 - **External services:**
   - Bind mount `./data:/app/data` from `docker-compose.yml` (Slice 002) — the SQLite file lives here, which is what makes "restart and see them still there" work

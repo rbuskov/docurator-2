@@ -61,7 +61,7 @@ I can click "Add Gmail account" on the Dashboard, complete Google's OAuth flow f
 - **External services:**
   - Google OAuth 2.0 + Gmail consent flow (Desktop OAuth client; user supplies own credentials per `architecture.md` § "Open source considerations")
 - **Other:**
-  - The `gmail.readonly`-only OAuth scope policy is implemented and exercised end to end. No write scopes appear anywhere in the codebase. The build-time grep guard arrives in Slice 003 (where the Gmail API client is introduced); for now, the policy is enforced by code review and the absence of any Gmail client wrapper at all.
+  - The OAuth scope policy from `architecture.md` § "Read-only Gmail access" is implemented and exercised end to end: `gmail.readonly` (the only Gmail-touching scope) plus the identity scopes `openid` and `userinfo.email`. No Gmail write scopes appear anywhere in the codebase. The build-time grep guard arrives in Slice 003 (where the Gmail API client is introduced); for now, the policy is enforced by code review and the absence of any Gmail client wrapper at all.
 
 ## Out of scope
 
@@ -70,11 +70,11 @@ I can click "Add Gmail account" on the Dashboard, complete Google's OAuth flow f
 - WAL mode on the SQLite connection → Slice 004
 - The `processed_messages`, `sync_state`, `app_config` tables and the rest of the migration backlog → Slice 004
 - Repository layer for non-`accounts` tables → Slice 004
-- Aggregate "this month: N processed, M receipts" counters on the Dashboard → Slice 006 (depends on documents/processed_messages)
+- Aggregate "this month: N processed, M receipts" counters on the Dashboard → not planned for v1 per `architecture.md` § "Components — Frontend — Dashboard"; the per-account live sync counters, the Audit view, and the unresolved-failure badge cover the immediate need.
 - Ollama health check on the Dashboard → Slice 005
-- Removing accounts (a "Disconnect" button) → Slice 016
-- Editing `display_name` (the column exists and can be backfilled by hand if needed; UI for it is polish) → Slice 016
-- Settings panel with per-account management surfaces beyond Dashboard → Slice 016
+- Removing accounts (a "Disconnect" button) → not planned for v1; per `architecture.md` § "Components — Frontend" account management lives on the Dashboard with no v1 disconnect UI. Users who really need to remove an account can edit `data/app.db` directly or leave the account in `needs_reauth`.
+- Editing `display_name` from the UI (the column exists and can be backfilled by hand if needed) → not planned for v1
+- A standalone Settings → Accounts panel beyond what the Dashboard already shows → not planned for v1; the Dashboard is the canonical accounts surface (add, reconnect, status).
 
 ## Detailed design
 
@@ -92,13 +92,13 @@ This slice realizes `architecture.md` § "OAuth (loopback redirect, no persisten
 ## Acceptance criteria
 
 - With `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set in `.env`, `docker compose up` starts the app and the Dashboard renders with an empty account list and an "Add Gmail account" button.
-- Clicking "Add Gmail account" opens Google's OAuth consent screen for `gmail.readonly` (and only `gmail.readonly`); approving it returns to a tab that says the user can close it, and the Dashboard's account list now contains a row for that Google address with `status='connected'`.
+- Clicking "Add Gmail account" opens Google's OAuth consent screen requesting `gmail.readonly` (the only Gmail-touching scope) plus the OAuth identity scopes `openid` and `userinfo.email` per `architecture.md` § "Read-only Gmail access"; approving it returns to a tab that says the user can close it, and the Dashboard's account list now contains a row for that Google address with `status='connected'`.
 - Repeating the previous step while signed into a *different* Google account adds a second row (different `email`, different `slug`) without disturbing the first.
 - After `docker compose down` and `docker compose up`, both accounts still appear on the Dashboard but with no tokens in memory; their `status` is whatever was persisted (typically `connected`), but any Gmail-touching call would prompt re-auth (no Gmail-touching calls exist in this slice).
 - Manually revoking the app's access for one account in the Google account settings, then triggering a refresh (e.g. by waiting for token expiry or restarting the container so tokens are gone), produces an `invalid_grant` on the next OAuth refresh and flips that row's `status` to `needs_reauth` while the other account remains `connected`.
 - Clicking "Reconnect" on a `needs_reauth` row runs the OAuth flow again and, on success, flips the row back to `connected` without inserting a duplicate row (matched by `email`).
 - `GET /api/accounts` returns the same list the UI displays, in the schema documented above.
-- The codebase contains no references to any non-`gmail.readonly` OAuth scope, and contains no calls to any Gmail API method (the Gmail client itself doesn't ship until Slice 003).
+- The codebase contains no Gmail OAuth scope other than `gmail.readonly` (the only allowed Gmail scopes — `openid` and `userinfo.email` are the only non-Gmail OAuth scopes used, both for identity per `architecture.md` § "Read-only Gmail access"), and contains no calls to any Gmail API method (the Gmail client itself doesn't ship until Slice 003).
 
 ## Implementation notes
 

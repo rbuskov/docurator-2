@@ -35,7 +35,10 @@ When the same Stripe receipt arrives as both an HTML body and a PDF attachment i
   - `src/server/sync/orchestrator.ts` (Slice 006) — extended here
   - `src/server/sync/reclassify.ts` (Slice 010) — extended here so reclassification-produced documents also get fingerprinted and grouped
   - `src/server/api/documents.ts` (Slices 006 / 008 / 009) — extended here
-  - `src/client/main.tsx`, `src/client/App.tsx`, `src/client/api.ts`, `src/client/router.tsx` (Slices 001–003)
+  - `src/client/main.tsx` (Slice 001)
+  - `src/client/App.tsx` (Slice 001)
+  - `src/client/api.ts` (Slice 002)
+  - `src/client/router.tsx` (Slice 003)
 - **External services:** —
 - **Other:**
   - SQLite WAL + foreign-keys-on (Slice 004)
@@ -70,6 +73,8 @@ When the same Stripe receipt arrives as both an HTML body and a PDF attachment i
 - **Files / modules:**
   - `src/server/db/migrations/0011_create_document_groups.sql`
   - `src/server/db/migrations/0012_create_document_group_members.sql` — includes the backfill described above
+  - `src/server/db/migrate.ts` (modified, originally Slice 002) — extends the migration runner to detect a `-- BACKFILL` marker as the last non-empty line of a `.sql` migration. When the marker is present, after applying the SQL the runner runs a Node-side companion pass (resolved by filename — e.g. `0012_create_document_group_members.sql` → `migrations/0012_create_document_group_members.backfill.ts`) inside the same transaction as the migration's recording in `_migrations`. Idempotent: the companion pass relies on the migration's UNIQUE constraints to make re-application a no-op.
+  - `src/server/db/migrations/0012_create_document_group_members.backfill.ts` — the Node-side companion to migration 0012. Iterates every `documents` row, computes fingerprint via `dedup/fingerprint.ts`, and inserts the appropriate `document_groups` and `document_group_members` rows.
   - `src/server/dedup/fingerprint.ts` — `computeFingerprint({ vendor, amount, currency, transaction_date }): string | null`. Returns `null` if any of the four inputs is `null` / empty; otherwise returns the SHA-256 hex of the normalized concatenation. Pure function, no DB.
   - `src/server/db/repositories/document_groups.ts` — `findOrCreate({ account_id, fingerprint })` (transaction-safe via `INSERT … ON CONFLICT DO NOTHING; SELECT id FROM document_groups WHERE …`), `attachMember({ group_id, document_id })` (uses `INSERT OR REPLACE` on `document_group_members` since each document has at most one membership), `detachMember(document_id)`, `listMembers(group_id)`, `getGroupForDocument(document_id)`. All methods are account-aware via the `document_groups.account_id` column on the parent.
   - `src/server/sync/orchestrator.ts` (modified) — after each successful `documents` insert, computes fingerprint and (when non-null) calls `findOrCreate` + `attachMember`, all inside the per-message transaction so a partial state never leaks.
@@ -123,7 +128,7 @@ This slice realizes `architecture.md` § "Deduplication strategy" (the "Soft ded
 ## Acceptance criteria
 
 - After Slice 013 migrations apply, `sqlite3 data/app.db ".schema document_groups"` and `".schema document_group_members"` show the expected schemas with the cascading FKs and the `(account_id, fingerprint)` UNIQUE.
-- For a fresh install, syncing a Gmail account that has the same Stripe receipt as both an HTML body and a PDF attachment in one message produces two `documents` rows (Slice 006's HTML→PDF body rendering + the attachment), both with the same fingerprint, both in the same `document_groups` row, and the `document_group_members` table has two rows for that group.
+- For a fresh install, syncing a Gmail account that received the same Stripe receipt twice — say once as an HTML body in one email (no PDF attachment) and again as a PDF attachment in a separate email (e.g. a forwarded copy) — produces two `documents` rows whose `vendor`/`amount`/`currency`/`transaction_date` match. Both rows share the same fingerprint, land in the same `document_groups` row, and the `document_group_members` table has two rows for that group. (When a single message contains both a body-receipt and a receipt-shaped attachment, Slice 006's "prefer attachment, skip body" rule means only one `documents` row is created — that case is exercised by Slice 006's tests, not here.)
 - The Review view's metadata pane shows "This appears to also be in 1 other email in this account" with a "Go to" button when one of the two documents is loaded; clicking the button navigates to the sibling.
 - The same Stripe receipt arriving in `business@…` and `personal@…` connected accounts produces **two** `document_groups` rows (one per `account_id`), each with its own member; the Review pane on either account does **not** show the cross-account sibling.
 - A monthly recurring AWS bill that produces 12 documents in 12 months — same vendor, same amount, same currency, different `transaction_date` per month — produces 12 separate `document_groups` (one per month), each with one member; no spurious grouping across months.
