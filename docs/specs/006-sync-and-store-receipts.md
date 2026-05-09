@@ -1,6 +1,6 @@
 # Slice 006: Sync and store receipts
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
