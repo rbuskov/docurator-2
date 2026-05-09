@@ -1,0 +1,29 @@
+# Build inputs the container reinstalls / rebuilds itself
+node_modules
+dist
+.vite
+
+# VCS + per-developer state
+.git
+.gitignore
+.claude
+.vscode
+.idea
+.DS_Store
+
+# Runtime / user data — bind-mounted at runtime, never in the image
+data
+invoices
+.env
+.env.*
+
+# Documentation and licensing aren't needed at build time
+docs
+LICENSE
+*.md
+
+# Test artifacts
+coverage
+.nyc_output
+playwright-report
+test-results

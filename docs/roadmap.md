@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] 001-walking-skeleton
+- [x] 001-walking-skeleton
 - [ ] 002-connect-gmail-accounts
 - [ ] 003-see-my-emails-listed
 - [ ] 004-persistent-state-and-processed-messages-log

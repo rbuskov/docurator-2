@@ -1,0 +1,7 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3737:3737"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
