@@ -1,6 +1,6 @@
 # Slice 008: Edit extracted fields
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
