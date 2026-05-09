@@ -50,7 +50,8 @@ I can run `docker compose up` and visit `http://localhost:3737` to see a page th
 
 - Gmail OAuth flow, account-add UI, `accounts` table → Slice 002
 - Reading Gmail messages or any Gmail API client wrapper → Slice 003
-- SQLite, migration runner, persistent state → Slice 004
+- SQLite (DB connection, migration runner, `accounts` table, `./data` bind mount) → Slice 002
+- Additional persistence (`processed_messages`, `sync_state`, `app_config`, WAL mode) → Slice 004
 - Ollama integration, classification → Slice 005
 - Tailwind / shadcn/ui styling beyond what's needed to show plain text → Slice 016 (polish)
 - README walkthrough with screenshots and full setup docs → Slice 016
@@ -79,9 +80,9 @@ This slice is the smallest end-to-end skeleton that future slices can graft onto
 - The repo at this slice's commit contains a top-level `LICENSE` file whose first line identifies the MIT license.
 - `git status` on a fresh clone after `npm install` and `docker compose up` reports a clean working tree (i.e. `.gitignore` covers everything generated).
 
-## Risks / open questions
+## Implementation notes
 
-- **Exact placeholder copy.** The Observable result requires the page to say "Docurator". Whether to also show a tagline ("a curator of your business documents") is left to Slice 016 polish; this spec keeps it to the single word so the assertion in tests is unambiguous.
-- **TypeScript build for the server.** `architecture.md` doesn't mandate `tsc` vs `tsx`/`esbuild`/SWC for the server. Provisional choice: plain `tsc` to `dist/server/` for simplicity; revisit if cold start becomes an issue.
-- **Tailwind in this slice?** Architecture lists Tailwind in the stack, but no styling is needed to satisfy the Observable result. Provisional choice: do not configure Tailwind yet; introduce it the first time a slice needs styled components (likely Slice 002 for the Dashboard). Flag for human confirmation.
-- **Dev-mode workflow.** `npm run dev` (Vite dev server + watch-mode server) is convenient but not required by the Observable result. Provisional choice: include a basic `dev` script but don't gate the slice on it; the production `docker compose up` path is what ships.
+- **Placeholder copy.** The Observable result requires the page to say "Docurator". A tagline is left to Slice 016 polish; this spec keeps it to the single word so the assertion in tests is unambiguous.
+- **TypeScript build for the server.** Use plain `tsc` compiling to `dist/server/`. Cold start is not a concern at this slice's scale.
+- **Tailwind not wired yet.** No styling is needed to satisfy the Observable result. Tailwind/shadcn are introduced the first time a slice renders styled components (Slice 002 for the Dashboard).
+- **Dev-mode workflow.** A basic `npm run dev` script (Vite dev server + watch-mode server) ships for developer convenience. The Observable result is verified against the production `docker compose up` path.

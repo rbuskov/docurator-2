@@ -44,7 +44,7 @@ When the classifier extracts the wrong vendor, amount, currency, or transaction 
 - **DB tables / columns:**
   - `documents.vendor_edited` INTEGER NOT NULL DEFAULT 0 — `0` / `1` boolean (SQLite has no native boolean; the column is treated as a flag)
   - `documents.amount_edited` INTEGER NOT NULL DEFAULT 0
-  - `documents.date_edited` INTEGER NOT NULL DEFAULT 0 — covers edits to `transaction_date`. Currency edits do not get a parallel `currency_edited` flag per `architecture.md` § "Storage" (which lists exactly these three flags). See Risks.
+  - `documents.date_edited` INTEGER NOT NULL DEFAULT 0 — covers edits to `transaction_date`. Currency edits do not get a parallel `currency_edited` flag per `architecture.md` § "Storage" (which lists exactly these three flags); see Implementation notes.
 - **Migrations:**
   - `0008_add_documents_edited_flags.sql` — three `ALTER TABLE documents ADD COLUMN … INTEGER NOT NULL DEFAULT 0` statements
 - **API endpoints:**
@@ -84,8 +84,8 @@ When the classifier extracts the wrong vendor, amount, currency, or transaction 
 
 ## Out of scope
 
-- A `notes` column on `documents` and a notes textarea in the metadata pane → unattributed in `initial-feature-slices.md`; deferred to Slice 016 polish (or earlier if a follow-up adjusts slice scopes). See Risks.
-- A separate `currency_edited` flag → architecture sketch lists three flags; this slice ships those three. See Risks.
+- A `notes` column on `documents` and a notes textarea in the metadata pane → Slice 016 (ships the column, the textarea, and the manifest population)
+- A separate `currency_edited` flag → architecture sketch lists three flags; this slice ships those three; see Implementation notes
 - Tags picker / `tags` / `document_tags` tables → Slice 009
 - Surfacing the per-document edit history (the chain of `review_actions` rows) in the UI → Slice 016 polish; this slice writes the rows, doesn't display them
 - Bulk edit (multi-select + apply same vendor) → not planned for v1
@@ -104,7 +104,7 @@ This slice realizes `architecture.md` § "Components — Frontend — Review" ("
 - **`review_actions.details` shape.** For `action='edited'`, `details` is JSON `{ "field": "vendor"|"amount"|"currency"|"transaction_date", "from": <prior value>, "to": <new value> }`. Numeric values stay as numbers in the JSON; nulls stay as JSON `null`. This shape is consumed (read-only) by future analytics or audit surfaces; the present slice only writes.
 - **Transaction.** Loading the current row, computing the diff, running `UPDATE documents SET …`, and inserting one `review_actions` row per changed field all happen inside a single `db.transaction(() => { … })` block via `better-sqlite3`. If any step throws, nothing is written.
 - **Keyboard shortcut interplay.** Slice 007's `useReviewKeyboard` already ignores key events when an input is focused. `EditableField` uses native `<input>` elements, so `a`/`r`/`j`/`k` correctly disengage during edits and re-engage on blur. The `Escape` key inside an editable field reverts and blurs (so the next key press re-engages the review shortcuts immediately).
-- **Concurrency.** Single-user, single-tab is the baseline. Two-tab races against the same document field can cause stale-value writes, but the `review_actions` log preserves both edits and the `updated_at` timestamp records which one landed last. No optimistic-locking column (`if-match`/`version`) in this slice. Flag.
+- **Concurrency.** Single-user, single-tab is the baseline. Two-tab races against the same document field can cause stale-value writes, but the `review_actions` log preserves both edits and the `updated_at` timestamp records which one landed last. No optimistic-locking column (`if-match`/`version`) in this slice.
 
 ## Acceptance criteria
 
@@ -120,12 +120,12 @@ This slice realizes `architecture.md` § "Components — Frontend — Review" ("
 - A PATCH that hits a server error (e.g. a malformed request) shows the error chip on the field and reverts the optimistic value; the corresponding DB row remains unchanged.
 - `npm run check:gmail-readonly` (Slice 003 guard) still passes.
 
-## Risks / open questions
+## Implementation notes
 
-- **No `notes` column.** `architecture.md` § "Storage" lists `notes`, and § "Components — Frontend — Review" mentions a notes field. This slice's spec doesn't add it because the slice description in `initial-feature-slices.md` doesn't mention it. The most natural homes are this slice (an inline editable textarea alongside the field edits) or Slice 016 polish (with other UX additions). Provisional choice: defer to Slice 016. Flag for human confirmation; if reassigned to this slice, the spec would gain a `notes` column on `documents`, a `notes` row in the PATCH body, and a textarea in `ReviewMetadata`.
-- **Asymmetric `*_edited` flags (no `currency_edited`).** Following the architecture sketch literally. Means: a downstream consumer that wants "was currency user-edited?" must JOIN `review_actions`. If the team later prefers symmetry, adding `currency_edited` is a one-line migration plus a one-line PATCH update. Flag.
-- **Currency allowlist.** Hard-coded list of ~60 ISO 4217 codes for the "common code" hint. Codes outside the list still save without rejection. The allowlist is a UX hint, not a constraint. If the user encounters an exotic code (e.g. `XPF` for CFP francs in French Polynesia receipts), they see the hint but can still proceed.
-- **Optimistic concurrency.** No `If-Match` / version column. Concurrent edits from two tabs race; the second write wins on the column, but both edits appear in `review_actions`. Acceptable for v1 single-user; flag.
-- **Number formatting and decimal separators.** Locale handling is fragile (`1,234.56` vs `1.234,56`). The parser tries both forms; if the user's locale produces something unusual (e.g. `1 234,56` with non-breaking space), the field rejects rather than guessing wrong. Flag.
-- **Undo for edits.** No UI undo path. The data is recoverable via `review_actions` JSON; a future polish slice could add a per-field "revert to model value" button using the first `from` of the relevant `review_actions` chain. Flag.
-- **`ReviewQueueRow` shape change.** Slice 007's response shape gains three new fields here. The change is additive — existing consumers ignore unknown fields — so this is not strictly an overlap with Slice 007's deliverable. Worth noting that future slices that consume the queue should rely on the latest shape, not Slice 007's frozen documentation.
+- **`notes` column deferred to Slice 016.** The `notes` column on `documents` and the textarea in `ReviewMetadata` ship in Slice 016 alongside the export-manifest population.
+- **Asymmetric `*_edited` flags (no `currency_edited`).** Follows the architecture sketch's three-flag design. Downstream consumers that want "was currency user-edited?" must JOIN `review_actions` filtered to `details.field='currency'`.
+- **Currency allowlist.** Hard-coded list of ~60 ISO 4217 codes drives the UX hint only. Codes outside the list still save (e.g. `XPF` for CFP francs).
+- **Optimistic concurrency.** No `If-Match`/version column. Concurrent edits from two tabs race; the second write wins on the column, both edits appear in `review_actions`. Acceptable for a single-user tool.
+- **Number formatting and decimal separators.** The parser tries `1,234.56` and `1.234,56` forms. Unusual formats (e.g. `1 234,56` with non-breaking space) are rejected rather than guessed.
+- **Undo for edits.** No UI undo path; data is recoverable via `review_actions` JSON. A future polish slice can add a per-field "revert to model value" button.
+- **`ReviewQueueRow` shape change.** Slice 007's response shape gains three new flag fields here. The change is additive; consumers ignore unknown fields.

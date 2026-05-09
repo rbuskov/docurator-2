@@ -81,7 +81,7 @@ I could clone this repo, hand it to a freelancer friend with a personal and a bu
 - Multi-select tag filter on the Inbox (deferred from Slice 009) → still deferred; user can chain single-tag exports
 - AND-semantics tag filter on the Export (deferred from Slice 011) → still deferred
 - Tagging from the Inbox view (deferred from Slice 009) → still deferred
-- A "Disconnect / remove account" UI (deferred from Slice 002) → still deferred; users can remove an account by editing the DB or letting it stay in `needs_reauth` indefinitely. Flag.
+- A "Disconnect / remove account" UI (deferred from Slice 002) → still deferred; users can remove an account by editing the DB or letting it stay in `needs_reauth` indefinitely.
 - Editing `display_name` from the UI (deferred from Slice 002) → still deferred
 - Edit history disclosure in the Review metadata pane (deferred from Slice 007) → still deferred
 - Undo toast for approve/reject (deferred from Slice 007) → still deferred
@@ -91,7 +91,7 @@ I could clone this repo, hand it to a freelancer friend with a personal and a bu
 - Per-attempt provenance column on `documents` (`processed_message_id` FK; flagged in Slices 006 / 014) → still deferred
 - Persisting reclassify diffs across container restarts (Slice 014) → still deferred
 - Settings → Accounts panel that consolidates Dashboard's accounts list + a "Disconnect" button → still deferred
-- Slice 006/007 JOIN cardinality cleanup (latest-`processed_messages`-row pattern explicit in their queries) → still deferred; the queries function correctly today as long as reclassification is rare; if reclassification becomes routine before this is fixed, duplicate rows in those listings may surface. Flag for follow-up.
+- Slice 006/007 JOIN cardinality cleanup (latest-`processed_messages`-row pattern explicit in their queries) → still deferred; the queries function correctly today as long as reclassification is rare; if reclassification becomes routine before this is fixed, duplicate rows in those listings may surface.
 - A polished "screenshots automation" pipeline → not planned; screenshots in the README are captured manually and committed under `docs/screenshots/`
 
 ## Detailed design
@@ -128,14 +128,14 @@ This slice's purpose is *delivering*: the prior 15 slices ship working code; thi
 - A new contributor (or a friend) can clone the repo, follow the README, and reach a state where: (a) `docker compose up` succeeds, (b) the Dashboard loads at `localhost:3737`, (c) the consent screen shows **only** `Read your email messages and settings`, (d) at least one Gmail account is connected, (e) Ollama health is green, (f) "Sync now" runs and produces receipts in `./invoices/`. This is the slice's "Observable result" and the most direct test of slice success.
 - `npm run check:gmail-readonly` (Slice 003 guard) still passes after this slice's changes.
 
-## Risks / open questions
+## Implementation notes
 
-- **Documentation drift.** The README and walkthrough will go stale as Google Cloud Console's UI changes (it does, frequently). Provisional mitigation: the screenshots live under `docs/screenshots/` and can be re-shot periodically; the doc text is written in steps that survive minor UI changes (e.g. "click the OAuth client type — usually labeled 'Desktop app'"). Flag.
-- **Test-users-list cap.** Google's Testing-mode consent screen caps test users at a small number (currently 100, but historically lower). Users connecting many Gmail accounts may need to add each address to the test-users list. The setup walkthrough names this explicitly. If a user hits the cap, they'd need to apply for verification (out of scope) or run separate Docurator installs (which works fine — each install has its own `.env` and DB).
-- **Notes max length.** 4000 chars is arbitrary; flag for confirmation. Markdown table rendering of long notes can wrap awkwardly; the manifest viewer (typically a spreadsheet program for CSV, a Markdown viewer for the `.md` companion) handles wrapping itself.
-- **Ollama-down banner threshold.** 30s before the banner shows is a guess; flag. Some users might want immediate feedback (badge already covers that); others want to ride out brief network blips. The banner is the "you should do something" surface.
-- **Re-auth banner polling.** 30s polling on `GET /api/accounts` is fine for most use; aggressive polling would be wasteful, slow polling means slow recovery from re-auth. Flag if this becomes a problem.
-- **Empty-state copy quality.** This is fundamentally a writing problem; review by a non-developer user is the right test. The provisional copy is a starting point; iterate.
-- **Many smaller deferrals.** The Out-of-scope list is long; some of those items (Disconnect account, undo toast, multi-select tag filter) are user-experience asks that may be more important than other Slice 016 items. The slice prioritizes the items that block self-service adoption (README, error states, re-auth UX, notes column for export completeness). Other deferrals can ship in follow-up slices outside the original 16-slice plan. Flag.
-- **No automated tests in this slice.** The implementation will need a test pass (unit tests for repositories, integration tests for endpoints, smoke tests for views), but test infrastructure is not a Slice 016 deliverable per the spec. The implementation team should add tests as they go through the prior slices' code paths. Flag.
-- **Slice 006/007 JOIN-cardinality cleanup not addressed here.** This slice does not extend the export's "latest-`processed_messages`-row" pattern back into the Inbox listing and Review queue. If reclassification becomes routine in real use, those listings may show duplicate rows. Flag for a follow-up cleanup pass after Slice 016 ships.
+- **Documentation drift.** Screenshots live under `docs/screenshots/` and can be re-shot periodically as Google Cloud Console's UI evolves. Doc text is written in steps that survive minor UI changes ("click the OAuth client type — usually labeled 'Desktop app'").
+- **Test-users-list cap.** Google's Testing-mode consent screen caps test users at a small number. Users connecting many Gmail accounts may need to add each address to the test-users list; the setup walkthrough names this explicitly. Hitting the cap means applying for verification (out of scope) or running separate Docurator installs (each install has its own `.env` and DB).
+- **Notes max length 4000 chars.** Generous for a single-receipt note. Markdown table rendering of long notes wraps via the viewer.
+- **Ollama-down banner threshold 30s.** Short flickers don't disrupt the UI; a sustained 30s outage does. The badge covers the immediate signal; the banner is the "you should do something" surface.
+- **Re-auth banner polling 30s.** Balances poll cost against recovery latency.
+- **Empty-state copy.** The shipped copy is a starting point; iterating with real-user feedback is expected.
+- **Many smaller deferrals.** The Out-of-scope list intentionally prioritizes self-service adoption (README, error states, re-auth UX, notes column). Remaining items can ship as follow-up slices.
+- **No automated tests in this slice.** Test infrastructure is not a Slice 016 deliverable; the implementation pass adds tests alongside the code it touches.
+- **Slice 006/007 JOIN-cardinality cleanup.** Not addressed here. If reclassification becomes routine before the cleanup, Inbox and Review queue listings may show duplicate rows for reclassified documents.

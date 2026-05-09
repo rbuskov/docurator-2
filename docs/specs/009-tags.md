@@ -135,13 +135,13 @@ This slice realizes `architecture.md` § "Storage" (the `tags` and `document_tag
 - Deleting a tag from Settings → Tags confirms the cascade ("removed from 7 receipts"), then removes it. The Inbox column and the chips on remaining documents update accordingly. Old `review_actions` rows still reference the deleted tag's name in their `details.tag_name`.
 - `npm run check:gmail-readonly` (Slice 003 guard) still passes.
 
-## Risks / open questions
+## Implementation notes
 
-- **Single-select tag filter.** Multi-tag filtering (e.g. "show all `business` AND `travel` receipts") is plausible bookkeeping. Provisional choice: ship single-select v1 to keep the picker simple. Multi-select is a small follow-up if the user asks. Flag.
-- **Tag color palette only.** No freeform color picker in v1 (just a 12-swatch palette + freeform hex input in the edit form). Native `<input type="color">` would be cheap to add later. Flag.
-- **Tag rename and review actions.** Renaming a tag updates `tags.name` but `review_actions.details.tag_name` keeps the old name in old rows. This is the intended behavior (audit log captures state at the time of the action), but it's worth documenting in the README's audit chapter. Flag for the docs slice.
-- **Deletion cost surfacing.** The DELETE handler does a pre-count to report `removed_links`, then runs the DELETE. The cascade is enforced by SQLite. A single transaction protects against concurrent links being added between the count and the delete. Flag if the pre-count drifts (single-user, low likelihood).
-- **Tag chip rendering across views.** `TagChip` is reused in three places (Review picker, Inbox column, future Audit view). Styling drift is the usual risk; component-level tests (when the project adds them) would cover this.
-- **`GROUP_CONCAT` parsing.** Using ASCII unit-separator (`\x1f`) inside `GROUP_CONCAT` is robust against tag names containing `,`/`;`. If a future migration changes how names are stored (e.g. allowing hex bytes), the separator may need to change. Provisional choice: fine for v1.
-- **No tag-color uniqueness.** Two tags can share a color. Probably fine (the name disambiguates) but worth flagging.
-- **Settings shell forward-declaring sections.** The disabled menu items for Slices 005/007/011/015 are a UX nicety but introduce a small coupling: those slices must update the Settings shell to enable their sections. Acceptable; they all touch the file anyway.
+- **Single-select tag filter.** v1 ships single-select to keep the picker simple. Multi-select (AND/OR semantics) is a Slice 016 polish item.
+- **Tag color palette + hex input.** No native `<input type="color">` in v1 — a 12-swatch palette plus a freeform hex input in the edit form. Adding the native picker later is cheap.
+- **Tag rename and review actions.** Renaming a tag updates `tags.name`, but `review_actions.details.tag_name` retains the old name in pre-rename rows. This is intentional: the audit log captures state at the time of the action.
+- **Deletion cost surfacing.** The DELETE handler runs a pre-count followed by the cascading delete, both inside one transaction so the reported `removed_links` matches what was deleted.
+- **`TagChip` reuse.** Used in Review picker, Inbox column, and the Slice 010 Audit view.
+- **`GROUP_CONCAT` parsing.** Uses ASCII unit-separator (`\x1f`) inside `GROUP_CONCAT` so tag names containing `,` or `;` parse correctly.
+- **Tag-color uniqueness.** Not enforced. Two tags can share a color; the name disambiguates.
+- **Settings shell forward-declaring sections.** Sections owned by Slices 005/007/011/015 ship as disabled menu items here so each later slice slots in without restructuring the shell.

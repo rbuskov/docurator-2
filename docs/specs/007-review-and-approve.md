@@ -129,12 +129,12 @@ This slice realizes `architecture.md` § "Components — Frontend — Review" an
 - Focusing the account-filter dropdown's hidden combobox doesn't trigger keyboard shortcuts (the `a`/`r` letters typed there don't approve/reject; the dropdown's typeahead behavior, if any, is unaffected).
 - `npm run check:gmail-readonly` (Slice 003 guard) still passes.
 
-## Risks / open questions
+## Implementation notes
 
-- **`react-pdf` worker.** `react-pdf` requires loading PDF.js's worker. The Vite build needs to handle this — typically by importing `pdfjs-dist/build/pdf.worker.min.js` and pointing the worker source at it. Provisional: follow `react-pdf`'s recommended Vite recipe; flag if it requires a Vite plugin.
-- **Confidence rank in SQL.** The `CASE` expression is fine but couples the column's semantic ordering to a hard-coded mapping. If a future slice adds a fourth confidence level (e.g. `unknown`), the mapping needs updating. Acceptable for a v1 with a fixed enum.
-- **Cross-tab race.** The 409 path handles the rare case of the same user approving the same doc from two tabs. For a single-user tool this is mostly defensive, but it does the right thing without locking.
-- **No editing yet.** The review-and-approve workflow is meaningfully harder without inline edit (vendor/amount errors block approval). For dogfooding, the Slice 007 ship is usable but limiting; the Slice 008 follow-up should land soon. Flag.
-- **Sender domain extraction.** Slice 004's `processed_messages.sender_domain` is set by Slice 006's sync orchestrator (from the `From` header). Edge cases: missing `From`, malformed addresses, IDN domains — could produce unusual `domain` values. The `senders` table accepts whatever string Slice 006 produces; a future cleanup may normalize. Flag.
-- **Append-only review history surfacing.** The `review_actions` table will accumulate rows across approves, edits (Slice 008), and tags (Slice 009). This slice doesn't show the history anywhere. Slice 016 polish could surface a "history" disclosure in the metadata pane.
-- **Keyboard shortcut conflict.** `a` and `r` on the document body might conflict with shadcn/ui's command-palette or accessibility shortcuts in some browsers. Provisional: fine for now; if an issue surfaces, switch to `Shift+A` / `Shift+R` or wire shortcuts through a library like `mousetrap`. Flag.
+- **`react-pdf` worker.** Follow `react-pdf`'s recommended Vite recipe: import `pdfjs-dist/build/pdf.worker.min.js` and configure the worker source. No Vite plugin required.
+- **Confidence rank in SQL.** Implemented as `CASE confidence WHEN 'low' THEN 0 WHEN 'medium' THEN 1 WHEN 'high' THEN 2 ELSE 3 END`. Adding a new confidence enum value would require updating this mapping.
+- **Cross-tab race.** Two tabs approving the same document race resolves via HTTP 409 on the second call; the UI displays "already reviewed" and refetches.
+- **No editing yet.** Inline editing of extracted fields is Slice 008. Slice 007 reviewers can still approve/reject; correcting fields waits for Slice 008.
+- **Sender domain extraction.** `senders.domain` is stored as whatever string Slice 006's sync orchestrator produced from the `From` header. Edge cases (missing/malformed `From`, IDNs) produce whatever string Slice 006 emits; later cleanups can normalize without schema changes.
+- **Append-only review history surfacing.** `review_actions` history is not surfaced in the UI in this slice. Slice 016 polish covers an in-pane history disclosure.
+- **Keyboard shortcut letters `a`/`r`.** Bound directly while `Review.tsx` is mounted; the handler bails when an input/textarea/contentEditable is focused so Slice 008's edit fields are unaffected.

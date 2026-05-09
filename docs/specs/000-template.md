@@ -50,8 +50,8 @@ Testable conditions for slice "done". Phrased as observable behavior, not implem
 
 - …
 
-## Risks / open questions
+## Implementation notes
 
-Known unknowns. Anything where `architecture.md` is silent or contradictory and you had to decide. Anything you want a human to confirm before this spec is promoted to `ready`.
+Decisions made where `architecture.md` is silent or ambiguous. Each entry states the chosen approach and the reasoning, so the implementer has a clear directive without needing to revisit the question. Use this section to record tradeoffs that future readers may need to understand — not to defer choices.
 
 - …
