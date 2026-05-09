@@ -1,6 +1,6 @@
 # Slice 013: Document groups and dedup display
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
