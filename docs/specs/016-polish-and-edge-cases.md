@@ -1,6 +1,6 @@
 # Slice 016: Polish and edge cases
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
