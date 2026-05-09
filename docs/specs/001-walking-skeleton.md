@@ -1,6 +1,6 @@
 # Slice 001: Walking skeleton
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
