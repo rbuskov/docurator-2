@@ -1,6 +1,6 @@
 # Slice 010: Audit view with deep links
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
