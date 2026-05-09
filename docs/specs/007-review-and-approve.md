@@ -1,6 +1,6 @@
 # Slice 007: Review and approve
 
-**Status:** draft
+**Status:** ready
 
 ## Observable result
 
