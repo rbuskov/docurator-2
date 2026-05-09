@@ -3,6 +3,7 @@ import type { Context, Hono } from 'hono'
 import * as accounts from '../auth/accounts.js'
 import { buildConsentUrl, exchangeCode } from '../auth/oauth.js'
 import * as session from '../auth/session.js'
+import { config } from '../config.js'
 
 const STATE_TTL_MS = 10 * 60 * 1000
 const PRUNE_THRESHOLD = 100
@@ -107,7 +108,7 @@ export function registerOauthRoutes(app: Hono, deps: OauthRouteDeps = {}): void 
         accountId = inserted.id
       }
       session.set(accountId, { tokens: exchanged.tokens })
-      return c.redirect('/', 302)
+      return c.redirect(config.postOauthRedirectUrl, 302)
     }
 
     if (entry.kind === 'reconnect') {
@@ -127,7 +128,7 @@ export function registerOauthRoutes(app: Hono, deps: OauthRouteDeps = {}): void 
       accounts.updateStatus(entry.accountId, 'connected')
       accounts.touchLastSeen(entry.accountId, now)
       session.set(entry.accountId, { tokens: exchanged.tokens })
-      return c.redirect('/', 302)
+      return c.redirect(config.postOauthRedirectUrl, 302)
     }
 
     return c.redirect('/', 302)
