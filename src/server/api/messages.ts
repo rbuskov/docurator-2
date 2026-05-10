@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
-import * as accounts from '../auth/accounts.js'
-import * as session from '../auth/session.js'
+import { isInvalidGrantError } from '../auth/invalid-grant.js'
+import { requireConnectedAccount } from '../auth/preconditions.js'
 import { createGmailClient as defaultCreateGmailClient } from '../gmail/client.js'
 import type { GmailClient } from '../gmail/client.js'
 import { extractHeader } from '../gmail/headers.js'
@@ -28,24 +28,8 @@ export function registerMessagesRoutes(app: Hono, deps: MessagesRouteDeps = {}):
       return c.json({ error: 'invalid_limit' }, 400)
     }
 
-    const account = accounts.findById(id)
-    if (account === undefined) {
-      return c.json({ error: 'account_not_found' }, 404)
-    }
-
-    if (account.status !== 'connected') {
-      return c.json(
-        { error: 'account_not_connected', status: account.status },
-        409,
-      )
-    }
-
-    if (session.get(id) === undefined) {
-      // Account is `connected` per DB but tokens are gone (e.g. container restart).
-      // Flip to needs_reauth so the Dashboard surfaces the Reconnect button.
-      accounts.updateStatus(id, 'needs_reauth')
-      return c.json({ error: 'account_not_connected', status: 'needs_reauth' }, 409)
-    }
+    const pre = requireConnectedAccount(id)
+    if (!pre.ok) return c.json(pre.body, pre.status)
 
     const client = _createGmailClient(id)
 
@@ -81,11 +65,3 @@ export function registerMessagesRoutes(app: Hono, deps: MessagesRouteDeps = {}):
   })
 }
 
-function isInvalidGrantError(err: unknown): boolean {
-  if (err instanceof Error && err.message.includes('invalid_grant')) return true
-  if (typeof err === 'object' && err !== null) {
-    const e = err as { response?: { data?: { error?: string } } }
-    if (e.response?.data?.error === 'invalid_grant') return true
-  }
-  return false
-}

@@ -6,6 +6,9 @@ const ENV_KEYS = [
   'GOOGLE_CLIENT_SECRET',
   'OAUTH_REDIRECT_PORT',
   'NODE_ENV',
+  'OLLAMA_URL',
+  'OLLAMA_MODEL',
+  'OLLAMA_TIMEOUT_MS',
 ] as const
 
 describe('server config', () => {
@@ -99,5 +102,44 @@ describe('server config', () => {
     process.env.NODE_ENV = 'production'
     const { config } = await import('./config.js')
     expect(config.nodeEnv).toBe('production')
+  })
+
+  it("defaults ollamaUrl to 'http://host.docker.internal:11434' when OLLAMA_URL is unset", async () => {
+    const { config } = await import('./config.js')
+    expect(config.ollamaUrl).toBe('http://host.docker.internal:11434')
+  })
+
+  it('reads ollamaUrl from OLLAMA_URL env var when set', async () => {
+    process.env.OLLAMA_URL = 'http://172.17.0.1:11434'
+    const { config } = await import('./config.js')
+    expect(config.ollamaUrl).toBe('http://172.17.0.1:11434')
+  })
+
+  it("defaults ollamaModel to 'qwen2.5vl:7b' when OLLAMA_MODEL is unset", async () => {
+    const { config } = await import('./config.js')
+    expect(config.ollamaModel).toBe('qwen2.5vl:7b')
+  })
+
+  it('reads ollamaModel from OLLAMA_MODEL env var when set', async () => {
+    process.env.OLLAMA_MODEL = 'llava:34b'
+    const { config } = await import('./config.js')
+    expect(config.ollamaModel).toBe('llava:34b')
+  })
+
+  it('defaults ollamaTimeoutMs to 120000 when OLLAMA_TIMEOUT_MS is unset', async () => {
+    const { config } = await import('./config.js')
+    expect(config.ollamaTimeoutMs).toBe(120000)
+  })
+
+  it('reads ollamaTimeoutMs from OLLAMA_TIMEOUT_MS env var when set to a positive integer', async () => {
+    process.env.OLLAMA_TIMEOUT_MS = '60000'
+    const { config } = await import('./config.js')
+    expect(config.ollamaTimeoutMs).toBe(60000)
+  })
+
+  it('falls back to default 120000 when OLLAMA_TIMEOUT_MS is non-numeric', async () => {
+    process.env.OLLAMA_TIMEOUT_MS = 'banana'
+    const { config } = await import('./config.js')
+    expect(config.ollamaTimeoutMs).toBe(120000)
   })
 })

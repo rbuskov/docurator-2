@@ -33,9 +33,15 @@ export type GetMessageArgs = {
   metadataHeaders?: string[]
 }
 
+export type AttachmentResult = {
+  data: Buffer
+  size: number
+}
+
 export type GmailClient = {
   listMessages(args: ListMessagesArgs): Promise<ListMessagesResult>
   getMessage(id: string, args: GetMessageArgs): Promise<gmail_v1.Schema$Message>
+  getAttachment(messageId: string, attachmentId: string): Promise<AttachmentResult>
 }
 
 export function createGmailClient(accountId: number): GmailClient {
@@ -71,6 +77,24 @@ export function createGmailClient(accountId: number): GmailClient {
             : {}),
         })
         return res.data
+      }),
+
+    getAttachment: (messageId, attachmentId) =>
+      withFreshTokens(accountId, async (sessionClient) => {
+        const gmail = gmailFactory(sessionClient as unknown as OAuth2Client)
+        const res = await gmail.users.messages.attachments.get({
+          userId: 'me',
+          messageId,
+          id: attachmentId,
+        })
+        // Gmail's API returns base64url-encoded bytes in `data` plus a numeric
+        // `size`. Buffer.from(..., 'base64url') handles the URL-safe alphabet
+        // and missing padding without manual normalization.
+        const raw = typeof res.data.data === 'string' ? res.data.data : ''
+        return {
+          data: Buffer.from(raw, 'base64url'),
+          size: typeof res.data.size === 'number' ? res.data.size : 0,
+        }
       }),
   }
 }

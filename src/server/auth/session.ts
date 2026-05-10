@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library'
 import { config } from '../config.js'
 import * as accounts from './accounts.js'
+import { isInvalidGrantError } from './invalid-grant.js'
 import { redirectUri } from './oauth.js'
 
 export type Tokens = {
@@ -94,11 +95,3 @@ export async function withFreshTokens<T>(
   return callback(entry.client)
 }
 
-function isInvalidGrantError(err: unknown): boolean {
-  if (err instanceof Error && err.message.includes('invalid_grant')) return true
-  if (typeof err === 'object' && err !== null) {
-    const e = err as { response?: { data?: { error?: string } } }
-    if (e.response?.data?.error === 'invalid_grant') return true
-  }
-  return false
-}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getJson, postJson } from '../api.js'
 import { AccountList } from '../components/AccountList.js'
 import { AddAccountButton } from '../components/AddAccountButton.js'
+import { OllamaHealth } from '../components/OllamaHealth.js'
 import { useAccountsPoll } from '../hooks/useAccountsPoll.js'
 import type { Account } from '../types.js'
 import { DevSeedPanel } from './DevSeedPanel.js'
@@ -81,6 +82,7 @@ export function Dashboard({ pollIntervalMs, pollTimeoutMs }: DashboardProps) {
   return (
     <main>
       {error !== null && <p role="alert">{error}</p>}
+      <OllamaHealth />
       <AccountList accounts={list} onReconnect={handleReconnect} />
       <AddAccountButton
         baselineIds={list.map((a) => a.id)}

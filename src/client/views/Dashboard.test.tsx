@@ -50,6 +50,13 @@ describe('Dashboard', () => {
       if (typeof url === 'string' && url === '/api/dev/enabled') {
         return jsonResponse({ error: 'not_found' }, 404)
       }
+      if (typeof url === 'string' && url === '/api/ollama/health') {
+        return jsonResponse({
+          reachable: true,
+          model: 'qwen2.5vl:7b',
+          model_available: true,
+        })
+      }
       throw new Error(`Unexpected fetch (no mock): ${url}`)
     })
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch
@@ -85,6 +92,8 @@ describe('Dashboard', () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/dev/enabled')
         return jsonResponse({ error: 'not_found' }, 404)
+      if (url === '/api/ollama/health')
+        return jsonResponse({ reachable: true, model: 'qwen2.5vl:7b', model_available: true })
       if (url === '/api/accounts')
         return jsonResponse({ accounts: [aliceNeedsReauth] })
       if (url === '/api/accounts/1/reconnect' && init?.method === 'POST') {
@@ -125,6 +134,8 @@ describe('Dashboard', () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/dev/enabled')
         return jsonResponse({ error: 'not_found' }, 404)
+      if (url === '/api/ollama/health')
+        return jsonResponse({ reachable: true, model: 'qwen2.5vl:7b', model_available: true })
       if (url === '/api/accounts') {
         accountsCallCount += 1
         // Initial fetch + first poll: still needs_reauth.
@@ -162,6 +173,8 @@ describe('Dashboard', () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/dev/enabled')
         return jsonResponse({ error: 'not_found' }, 404)
+      if (url === '/api/ollama/health')
+        return jsonResponse({ reachable: true, model: 'qwen2.5vl:7b', model_available: true })
       if (url === '/api/accounts') {
         accountsCallCount += 1
         // Initial fetch: just alice. After the OAuth start, polling sees both.
@@ -200,6 +213,19 @@ describe('Dashboard', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeDefined())
   })
 
+  it('renders the Ollama health badge', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ accounts: [aliceConnected] }))
+
+    render(<Dashboard pollIntervalMs={20} pollTimeoutMs={5000} />)
+
+    await waitFor(() => screen.getByText('alice@example.com'))
+    await waitFor(() => {
+      const pill = screen.getByTestId('ollama-health-pill')
+      expect(pill.getAttribute('data-state')).toBe('ready')
+    })
+    expect(screen.getByText(/ollama: qwen2\.5vl:7b ready/i)).toBeDefined()
+  })
+
   it('renders the Dev tools panel when /api/dev/enabled returns 200', async () => {
     // Override the beforeEach's queued 404 — this test wants the panel visible.
     // The /api/dev/enabled stub queued in beforeEach is consumed first (404),
@@ -211,6 +237,8 @@ describe('Dashboard', () => {
     fetchMock.mockReset()
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/dev/enabled') return jsonResponse({ enabled: true })
+      if (url === '/api/ollama/health')
+        return jsonResponse({ reachable: true, model: 'qwen2.5vl:7b', model_available: true })
       if (url === '/api/accounts')
         return jsonResponse({ accounts: [aliceConnected] })
       if (url.startsWith('/api/accounts/1/processed-messages'))

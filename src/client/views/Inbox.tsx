@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AccountPicker } from '../components/AccountPicker.js'
+import { ClassifyRowAction } from '../components/ClassifyRowAction.js'
 import type { Account, Message } from '../types.js'
 
 export const LAST_INBOX_ACCOUNT_KEY = 'docurator.lastInboxAccountId'
@@ -170,13 +171,14 @@ export function Inbox() {
       {hasConnected && error.kind === 'none' && loadingMessages && (
         <p>Loading messages…</p>
       )}
-      {hasConnected && error.kind === 'none' && messages !== null && (
+      {hasConnected && error.kind === 'none' && messages !== null && selectedAccountId !== null && (
         <table>
           <thead>
             <tr>
               <th>Subject</th>
               <th>Sender</th>
               <th>Date</th>
+              <th>Classify</th>
             </tr>
           </thead>
           <tbody>
@@ -185,6 +187,12 @@ export function Inbox() {
                 <td>{m.subject}</td>
                 <td>{m.from}</td>
                 <td>{m.date}</td>
+                <td>
+                  <ClassifyRowAction
+                    account_id={selectedAccountId}
+                    message_id={m.id}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

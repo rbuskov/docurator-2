@@ -20,15 +20,25 @@ type GetArgs = {
   metadataHeaders?: string[]
 }
 
+type AttachmentArgs = {
+  userId: string
+  messageId: string
+  id: string
+}
+
 type FakeGmail = {
   users: {
     messages: {
       list: ReturnType<typeof vi.fn>
       get: ReturnType<typeof vi.fn>
+      attachments: {
+        get: ReturnType<typeof vi.fn>
+      }
     }
   }
   __listCalls: ListArgs[]
   __getCalls: GetArgs[]
+  __attachmentCalls: AttachmentArgs[]
 }
 
 function makeFakeGmail(opts: {
@@ -36,9 +46,12 @@ function makeFakeGmail(opts: {
   getResponse?: unknown
   listError?: Error
   getError?: Error
+  attachmentResponse?: unknown
+  attachmentError?: Error
 }): FakeGmail {
   const listCalls: ListArgs[] = []
   const getCalls: GetArgs[] = []
+  const attachmentCalls: AttachmentArgs[] = []
   const list = vi.fn(async (args: ListArgs) => {
     listCalls.push(args)
     if (opts.listError) throw opts.listError
@@ -49,10 +62,22 @@ function makeFakeGmail(opts: {
     if (opts.getError) throw opts.getError
     return { data: opts.getResponse ?? {} }
   })
+  const attachmentGet = vi.fn(async (args: AttachmentArgs) => {
+    attachmentCalls.push(args)
+    if (opts.attachmentError) throw opts.attachmentError
+    return { data: opts.attachmentResponse ?? {} }
+  })
   return {
-    users: { messages: { list, get } },
+    users: {
+      messages: {
+        list,
+        get,
+        attachments: { get: attachmentGet },
+      },
+    },
     __listCalls: listCalls,
     __getCalls: getCalls,
+    __attachmentCalls: attachmentCalls,
   }
 }
 
@@ -175,5 +200,87 @@ describe('createGmailClient.getMessage', () => {
 
     const client = createGmailClient(9)
     await expect(client.getMessage('msg1', { format: 'metadata' })).rejects.toBe(err)
+  })
+})
+
+describe('createGmailClient.getAttachment', () => {
+  it('calls gmail.users.messages.attachments.get with userId, messageId, and id', async () => {
+    const fake = makeFakeGmail({
+      attachmentResponse: { data: 'aGVsbG8', size: 5 },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    await client.getAttachment('msg1', 'att-1')
+
+    expect(fake.users.messages.attachments.get).toHaveBeenCalledTimes(1)
+    expect(fake.__attachmentCalls[0]).toEqual({
+      userId: 'me',
+      messageId: 'msg1',
+      id: 'att-1',
+    })
+  })
+
+  it('decodes base64url payload to a Buffer and exposes size', async () => {
+    // 'aGVsbG8' is base64url for 'hello'.
+    const fake = makeFakeGmail({
+      attachmentResponse: { data: 'aGVsbG8', size: 5 },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    const result = await client.getAttachment('msg1', 'att-1')
+
+    expect(Buffer.isBuffer(result.data)).toBe(true)
+    expect(result.data.toString('utf8')).toBe('hello')
+    expect(result.size).toBe(5)
+  })
+
+  it('decodes a base64url payload that uses the URL-safe alphabet (- and _)', async () => {
+    // Build a payload with bytes that produce '-' and '_' in base64url.
+    const bytes = Buffer.from([0xfb, 0xff, 0xbf])
+    const payload = bytes.toString('base64url') // expect '-_-_' style
+    expect(payload).toMatch(/[-_]/)
+    const fake = makeFakeGmail({
+      attachmentResponse: { data: payload, size: bytes.length },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    const result = await client.getAttachment('msg1', 'att-1')
+
+    expect(result.data.equals(bytes)).toBe(true)
+  })
+
+  it('routes through session.withFreshTokens with the given accountId', async () => {
+    const fake = makeFakeGmail({
+      attachmentResponse: { data: 'aGVsbG8', size: 5 },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(99)
+    await client.getAttachment('msg1', 'att-1')
+
+    expect(withFreshTokensSpy).toHaveBeenCalledTimes(1)
+    expect(withFreshTokensSpy.mock.calls[0]?.[0]).toBe(99)
+  })
+
+  it('rethrows session errors verbatim', async () => {
+    const err = new Error('invalid_grant: token revoked')
+    withFreshTokensSpy.mockImplementationOnce(async () => {
+      throw err
+    })
+
+    const client = createGmailClient(3)
+    await expect(client.getAttachment('msg1', 'att-1')).rejects.toBe(err)
+  })
+
+  it('rethrows API errors verbatim', async () => {
+    const err = new Error('attachment not found')
+    const fake = makeFakeGmail({ attachmentError: err })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    await expect(client.getAttachment('msg1', 'att-1')).rejects.toBe(err)
   })
 })

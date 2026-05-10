@@ -35,3 +35,33 @@ export type ProcessedMessage = {
   sender_domain: string | null
   subject: string | null
 }
+
+export type ClassificationVerdict = 'invoice' | 'receipt' | 'other'
+export type ClassificationConfidence = 'high' | 'medium' | 'low'
+
+export type ClassificationArtifact = {
+  kind: 'body' | 'attachment'
+  filename?: string
+  mime_type: string
+}
+
+// Mirrors `classifyResponseSchema` from src/server/classify/schema.ts.
+export type ClassificationResult = {
+  classification: ClassificationVerdict
+  confidence: ClassificationConfidence
+  reason: string
+  vendor?: string
+  amount?: number
+  currency?: string
+  transaction_date?: string
+  model_used: string
+  artifacts: ClassificationArtifact[]
+}
+
+// Mirrors the body of GET /api/ollama/health.
+export type OllamaHealth = {
+  reachable: boolean
+  model: string
+  model_available: boolean
+  error?: string
+}

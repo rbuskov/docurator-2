@@ -40,6 +40,8 @@ function makeGmailFixture(opts: {
   return {
     listMessages: async () => ({ messages }),
     getMessage: async (id) => messageMap.get(id) ?? ({} as GetResult),
+    // Stub — dev-seed flow does not exercise attachments.
+    getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
   }
 }
 
@@ -56,6 +58,7 @@ function makeFailingClient(opts: {
       if (opts.get) return opts.get(id)
       return {} as GetResult
     },
+    getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
   }
 }
 
@@ -505,6 +508,7 @@ describe('dev API — development mode', () => {
             },
           } as gmail_v1.Schema$Message
         },
+        getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
       }
       const app = await buildTestApp({ createGmailClient: () => failing })
 

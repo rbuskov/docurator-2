@@ -3,7 +3,11 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
+    // DOM is included for the type names only — pdfjs-dist's RenderParameters
+    // references DOM's CanvasRenderingContext2D, and Slice 005's render-pdf.ts
+    // casts the @napi-rs/canvas context through it. Compile-time only; the
+    // runtime (Node) never has window/document. ADR-004 covers the choice.
+    "lib": ["ES2022", "DOM"],
     "types": ["node"],
     "noEmit": false,
     "outDir": "dist/server",

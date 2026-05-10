@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
-import * as accounts from '../auth/accounts.js'
-import * as session from '../auth/session.js'
+import { isInvalidGrantError } from '../auth/invalid-grant.js'
+import { requireConnectedAccount } from '../auth/preconditions.js'
 import { config } from '../config.js'
 import { getDb } from '../db/index.js'
 import * as processedMessages from '../db/repositories/processed_messages.js'
@@ -66,20 +66,8 @@ export function registerDevRoutes(app: Hono, deps: DevRouteDeps = {}): void {
       )
     }
 
-    const account = accounts.findById(accountId)
-    if (account === undefined) {
-      return c.json({ error: 'account_not_found' }, 404)
-    }
-    if (account.status !== 'connected') {
-      return c.json(
-        { error: 'account_not_connected', status: account.status },
-        409,
-      )
-    }
-    if (session.get(accountId) === undefined) {
-      accounts.updateStatus(accountId, 'needs_reauth')
-      return c.json({ error: 'account_not_connected', status: 'needs_reauth' }, 409)
-    }
+    const pre = requireConnectedAccount(accountId)
+    if (!pre.ok) return c.json(pre.body, pre.status)
 
     const client = _createGmailClient(accountId)
 
@@ -157,11 +145,3 @@ export function registerDevRoutes(app: Hono, deps: DevRouteDeps = {}): void {
   })
 }
 
-function isInvalidGrantError(err: unknown): boolean {
-  if (err instanceof Error && err.message.includes('invalid_grant')) return true
-  if (typeof err === 'object' && err !== null) {
-    const e = err as { response?: { data?: { error?: string } } }
-    if (e.response?.data?.error === 'invalid_grant') return true
-  }
-  return false
-}

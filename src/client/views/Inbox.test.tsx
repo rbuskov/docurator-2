@@ -102,6 +102,21 @@ describe('<Inbox />', () => {
     expect(select.value).toBe('1')
   })
 
+  it('renders a Classify button on each row', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/accounts') return jsonResponse({ accounts: [alice] })
+      if (url.startsWith('/api/accounts/1/messages'))
+        return jsonResponse({ messages: [msgM1, msgM2] })
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    renderInbox()
+
+    await waitFor(() => screen.getByText('Stripe payout'))
+    const buttons = screen.getAllByRole('button', { name: /classify/i })
+    expect(buttons).toHaveLength(2)
+  })
+
   it('initializes the picker from localStorage when the stored id is connected', async () => {
     window.localStorage.setItem(LAST_INBOX_ACCOUNT_KEY, '2')
     fetchMock.mockImplementation(async (url: string) => {

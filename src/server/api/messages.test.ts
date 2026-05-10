@@ -25,6 +25,8 @@ function makeFakeClient(opts: {
       if (opts.get) return opts.get(id)
       return {}
     },
+    // Stub — no test in this file exercises attachments.
+    getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
   }
 }
 
@@ -287,6 +289,7 @@ describe('GET /api/accounts/:id/messages', () => {
         return { messages: [] }
       },
       getMessage: async () => ({}),
+      getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -304,6 +307,7 @@ describe('GET /api/accounts/:id/messages', () => {
         throw new Error('invalid_grant: token revoked')
       },
       getMessage: async () => ({}),
+      getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -319,6 +323,7 @@ describe('GET /api/accounts/:id/messages', () => {
         throw new Error('quotaExceeded: rate limit')
       },
       getMessage: async () => ({}),
+      getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -350,6 +355,7 @@ describe('GET /api/accounts/:id/messages', () => {
         }
         throw new Error('Gmail 500: something broke')
       },
+      getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -370,6 +376,7 @@ describe('GET /api/accounts/:id/messages', () => {
         return { messages: [] }
       },
       getMessage: async () => ({}),
+      getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })

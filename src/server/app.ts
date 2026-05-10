@@ -1,9 +1,11 @@
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { registerAccountsRoutes } from './api/accounts.js'
+import { registerClassifyRoutes } from './api/classify.js'
 import { registerDevRoutes } from './api/dev.js'
 import { registerMessagesRoutes } from './api/messages.js'
 import { registerOauthRoutes } from './api/oauth.js'
+import { registerOllamaRoutes } from './api/ollama.js'
 import { registerProcessedMessagesRoutes } from './api/processed_messages.js'
 
 export type CreateAppOptions = {
@@ -19,6 +21,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   registerMessagesRoutes(app)
   registerDevRoutes(app)
   registerProcessedMessagesRoutes(app)
+  registerClassifyRoutes(app)
+  registerOllamaRoutes(app)
 
   if (options.staticDir !== undefined) {
     app.use('*', serveStatic({ root: options.staticDir }))

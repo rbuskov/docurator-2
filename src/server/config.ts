@@ -1,6 +1,9 @@
 const DEFAULT_PORT = 3737
 const DEFAULT_DEV_CLIENT_PORT = 5173
 const DEFAULT_DB_PATH = './data/app.db'
+const DEFAULT_OLLAMA_URL = 'http://host.docker.internal:11434'
+const DEFAULT_OLLAMA_MODEL = 'qwen2.5vl:7b'
+const DEFAULT_OLLAMA_TIMEOUT_MS = 120000
 
 const port = process.env.APP_PORT !== undefined ? Number(process.env.APP_PORT) : DEFAULT_PORT
 const oauthRedirectPort =
@@ -22,6 +25,17 @@ const devClientPort =
     : DEFAULT_DEV_CLIENT_PORT
 const postOauthRedirectUrl = isDev ? `http://localhost:${devClientPort}/` : '/'
 
+const ollamaUrl = process.env.OLLAMA_URL ?? DEFAULT_OLLAMA_URL
+const ollamaModel = process.env.OLLAMA_MODEL ?? DEFAULT_OLLAMA_MODEL
+// Non-numeric / NaN env values fall back to the default; this mirrors how
+// `port` is parsed but with an explicit guard since the default is large.
+const ollamaTimeoutRaw =
+  process.env.OLLAMA_TIMEOUT_MS !== undefined ? Number(process.env.OLLAMA_TIMEOUT_MS) : NaN
+const ollamaTimeoutMs =
+  Number.isFinite(ollamaTimeoutRaw) && ollamaTimeoutRaw > 0
+    ? ollamaTimeoutRaw
+    : DEFAULT_OLLAMA_TIMEOUT_MS
+
 export const config = Object.freeze({
   port,
   oauthRedirectPort,
@@ -30,4 +44,7 @@ export const config = Object.freeze({
   dbPath: DEFAULT_DB_PATH,
   postOauthRedirectUrl,
   nodeEnv,
+  ollamaUrl,
+  ollamaModel,
+  ollamaTimeoutMs,
 })
