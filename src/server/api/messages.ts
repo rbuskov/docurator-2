@@ -1,9 +1,9 @@
-import type { gmail_v1 } from 'googleapis'
 import type { Hono } from 'hono'
 import * as accounts from '../auth/accounts.js'
 import * as session from '../auth/session.js'
 import { createGmailClient as defaultCreateGmailClient } from '../gmail/client.js'
 import type { GmailClient } from '../gmail/client.js'
+import { extractHeader } from '../gmail/headers.js'
 
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 100
@@ -79,17 +79,6 @@ export function registerMessagesRoutes(app: Hono, deps: MessagesRouteDeps = {}):
       return c.json({ error: 'gmail_error', message }, 502)
     }
   })
-}
-
-function extractHeader(message: gmail_v1.Schema$Message, name: string): string {
-  const headers = message.payload?.headers ?? []
-  const target = name.toLowerCase()
-  for (const h of headers) {
-    if (typeof h.name === 'string' && h.name.toLowerCase() === target) {
-      return h.value ?? ''
-    }
-  }
-  return ''
 }
 
 function isInvalidGrantError(err: unknown): boolean {

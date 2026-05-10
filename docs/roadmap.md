@@ -3,7 +3,7 @@
 - [x] 001-walking-skeleton
 - [x] 002-connect-gmail-accounts
 - [x] 003-see-my-emails-listed
-- [ ] 004-persistent-state-and-processed-messages-log
+- [x] 004-persistent-state-and-processed-messages-log
 - [ ] 005-classify-one-email-end-to-end
 - [ ] 006-sync-and-store-receipts
 - [ ] 007-review-and-approve

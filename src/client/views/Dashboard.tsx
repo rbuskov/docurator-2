@@ -4,6 +4,7 @@ import { AccountList } from '../components/AccountList.js'
 import { AddAccountButton } from '../components/AddAccountButton.js'
 import { useAccountsPoll } from '../hooks/useAccountsPoll.js'
 import type { Account } from '../types.js'
+import { DevSeedPanel } from './DevSeedPanel.js'
 
 export type DashboardProps = {
   pollIntervalMs?: number
@@ -87,6 +88,7 @@ export function Dashboard({ pollIntervalMs, pollTimeoutMs }: DashboardProps) {
         pollIntervalMs={pollIntervalMs}
         pollTimeoutMs={pollTimeoutMs}
       />
+      <DevSeedPanel />
     </main>
   )
 }

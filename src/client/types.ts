@@ -18,3 +18,20 @@ export type Message = {
   date: string
   internal_date: string
 }
+
+export type ProcessedMessageStatus = 'success' | 'failed'
+export type ProcessedMessageClassification = 'invoice' | 'receipt' | 'other'
+export type ProcessedMessageConfidence = 'high' | 'medium' | 'low'
+
+export type ProcessedMessage = {
+  message_id: string
+  thread_id: string
+  internal_date: string
+  processed_at: string
+  model_used: string
+  status: ProcessedMessageStatus
+  classification: ProcessedMessageClassification | null
+  confidence: ProcessedMessageConfidence | null
+  sender_domain: string | null
+  subject: string | null
+}

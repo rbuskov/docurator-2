@@ -14,7 +14,8 @@ const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? ''
 
 // In dev, the SPA is served by Vite on a separate port; the OAuth callback
 // must redirect the browser there, not back to Hono on `:APP_PORT`.
-const isDev = process.env.NODE_ENV === 'development'
+const nodeEnv = process.env.NODE_ENV ?? 'development'
+const isDev = nodeEnv === 'development'
 const devClientPort =
   process.env.CLIENT_DEV_PORT !== undefined
     ? Number(process.env.CLIENT_DEV_PORT)
@@ -28,4 +29,5 @@ export const config = Object.freeze({
   googleClientSecret,
   dbPath: DEFAULT_DB_PATH,
   postOauthRedirectUrl,
+  nodeEnv,
 })

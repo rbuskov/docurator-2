@@ -28,9 +28,9 @@ const bob = {
   last_seen_at: null,
 }
 
-function jsonResponse(value: unknown): Response {
+function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
-    status: 200,
+    status,
     headers: { 'Content-Type': 'application/json' },
   })
 }
@@ -40,6 +40,18 @@ describe('Dashboard', () => {
 
   beforeEach(() => {
     fetchMock = vi.fn()
+    // The Dashboard renders <DevSeedPanel /> once accounts have loaded.
+    // The panel probes /api/dev/enabled on mount; most existing tests don't
+    // care about the panel and want it invisible. Set the default
+    // implementation to URL-route /api/dev/enabled → 404, so any call to
+    // that path falls through to a 404 after the test's own
+    // mockResolvedValueOnce chain (for /api/accounts etc.) is consumed.
+    fetchMock.mockImplementation(async (url: string) => {
+      if (typeof url === 'string' && url === '/api/dev/enabled') {
+        return jsonResponse({ error: 'not_found' }, 404)
+      }
+      throw new Error(`Unexpected fetch (no mock): ${url}`)
+    })
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch
     vi.spyOn(window, 'open').mockImplementation(() => null)
   })
@@ -69,11 +81,20 @@ describe('Dashboard', () => {
   })
 
   it('clicking Reconnect calls POST /api/accounts/:id/reconnect and opens consent_url', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ accounts: [aliceNeedsReauth] }))
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ consent_url: 'https://accounts.google.com/oauth/v2/x', state: 's-rc' }),
-    )
-    fetchMock.mockResolvedValue(jsonResponse({ accounts: [aliceNeedsReauth] }))
+    fetchMock.mockReset()
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/dev/enabled')
+        return jsonResponse({ error: 'not_found' }, 404)
+      if (url === '/api/accounts')
+        return jsonResponse({ accounts: [aliceNeedsReauth] })
+      if (url === '/api/accounts/1/reconnect' && init?.method === 'POST') {
+        return jsonResponse({
+          consent_url: 'https://accounts.google.com/oauth/v2/x',
+          state: 's-rc',
+        })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
 
     const user = userEvent.setup()
     render(<Dashboard pollIntervalMs={20} pollTimeoutMs={5000} />)
@@ -99,14 +120,27 @@ describe('Dashboard', () => {
   })
 
   it('reconnect polling refreshes the list when the row flips back to connected', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ accounts: [aliceNeedsReauth] }))
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ consent_url: 'https://accounts.google.com/oauth/v2/x', state: 's-rc' }),
-    )
-    // First poll: still needs_reauth
-    fetchMock.mockResolvedValueOnce(jsonResponse({ accounts: [aliceNeedsReauth] }))
-    // Subsequent polls: now connected
-    fetchMock.mockResolvedValue(jsonResponse({ accounts: [aliceConnected] }))
+    fetchMock.mockReset()
+    let accountsCallCount = 0
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/dev/enabled')
+        return jsonResponse({ error: 'not_found' }, 404)
+      if (url === '/api/accounts') {
+        accountsCallCount += 1
+        // Initial fetch + first poll: still needs_reauth.
+        // Subsequent polls: now connected.
+        if (accountsCallCount <= 2)
+          return jsonResponse({ accounts: [aliceNeedsReauth] })
+        return jsonResponse({ accounts: [aliceConnected] })
+      }
+      if (url === '/api/accounts/1/reconnect' && init?.method === 'POST') {
+        return jsonResponse({
+          consent_url: 'https://accounts.google.com/oauth/v2/x',
+          state: 's-rc',
+        })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
 
     const user = userEvent.setup()
     render(<Dashboard pollIntervalMs={20} pollTimeoutMs={5000} />)
@@ -123,11 +157,25 @@ describe('Dashboard', () => {
   })
 
   it('appends a new account to the list when AddAccountButton.onAdded fires', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ accounts: [aliceConnected] }))
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ consent_url: 'https://accounts.google.com/oauth/v2/x', state: 's-add' }),
-    )
-    fetchMock.mockResolvedValue(jsonResponse({ accounts: [aliceConnected, bob] }))
+    fetchMock.mockReset()
+    let accountsCallCount = 0
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/dev/enabled')
+        return jsonResponse({ error: 'not_found' }, 404)
+      if (url === '/api/accounts') {
+        accountsCallCount += 1
+        // Initial fetch: just alice. After the OAuth start, polling sees both.
+        if (accountsCallCount === 1) return jsonResponse({ accounts: [aliceConnected] })
+        return jsonResponse({ accounts: [aliceConnected, bob] })
+      }
+      if (url === '/api/oauth/start' && init?.method === 'POST') {
+        return jsonResponse({
+          consent_url: 'https://accounts.google.com/oauth/v2/x',
+          state: 's-add',
+        })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
 
     const user = userEvent.setup()
     render(<Dashboard pollIntervalMs={20} pollTimeoutMs={5000} />)
@@ -150,5 +198,34 @@ describe('Dashboard', () => {
     render(<Dashboard pollIntervalMs={20} pollTimeoutMs={5000} />)
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeDefined())
+  })
+
+  it('renders the Dev tools panel when /api/dev/enabled returns 200', async () => {
+    // Override the beforeEach's queued 404 — this test wants the panel visible.
+    // The /api/dev/enabled stub queued in beforeEach is consumed first (404),
+    // then the dashboard's /api/accounts fetch consumes the next, then the
+    // panel's /api/accounts (re-fetched after /api/dev/enabled resolves —
+    // but actually the panel fetches /api/accounts independently). We use
+    // mockImplementation here to URL-route everything so the order doesn't
+    // matter.
+    fetchMock.mockReset()
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/dev/enabled') return jsonResponse({ enabled: true })
+      if (url === '/api/accounts')
+        return jsonResponse({ accounts: [aliceConnected] })
+      if (url.startsWith('/api/accounts/1/processed-messages'))
+        return jsonResponse({ rows: [] })
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    render(<Dashboard pollIntervalMs={20} pollTimeoutMs={5000} />)
+
+    await waitFor(() => screen.getByText('alice@example.com'))
+    await waitFor(() =>
+      screen.getByRole('heading', { name: /dev tools/i }),
+    )
+    expect(
+      screen.getByRole('button', { name: /Mark first 10 messages as processed/i }),
+    ).toBeDefined()
   })
 })

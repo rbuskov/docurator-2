@@ -61,5 +61,6 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Claude Code per-developer settings (the rest of .claude/ is intentionally tracked)
+# Claude Code
 .claude/settings.local.json
+.claude/ralph-loop.local.md

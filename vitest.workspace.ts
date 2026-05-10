@@ -13,6 +13,13 @@ export default [
       name: 'server',
       environment: 'node',
       include: ['src/server/**/*.test.ts', 'scripts/**/*.test.ts'],
+      // Server tests rely on module-level singletons (DB connection, OAuth
+      // state map, session store). The default `pool: 'threads'` shares
+      // module state between test files in the same worker, causing flaky
+      // "database connection is not open" failures once the suite grows.
+      // `forks` runs each test file in its own subprocess — slower startup,
+      // but full isolation.
+      pool: 'forks',
     },
   },
   {

@@ -47,4 +47,31 @@ describe('db singleton', () => {
     expect(second).not.toBe(first)
     expect(() => first.exec('CREATE TABLE z (id INTEGER PRIMARY KEY)')).toThrow()
   })
+
+  it('opens the connection in WAL mode', async () => {
+    const { getDb, setDbPathForTest } = await import('./index.js')
+    setDbPathForTest(tempPath)
+    const db = getDb()
+    expect(db.pragma('journal_mode', { simple: true })).toBe('wal')
+  })
+
+  it('enables foreign_keys on the connection', async () => {
+    const { getDb, setDbPathForTest } = await import('./index.js')
+    setDbPathForTest(tempPath)
+    const db = getDb()
+    expect(db.pragma('foreign_keys', { simple: true })).toBe(1)
+  })
+
+  it('re-applies WAL and foreign_keys after setDbPathForTest reopens the handle', async () => {
+    const { getDb, setDbPathForTest } = await import('./index.js')
+    setDbPathForTest(tempPath)
+    getDb()
+
+    const tempPath2 = join(tempDir, 'other.db')
+    setDbPathForTest(tempPath2)
+    const second = getDb()
+
+    expect(second.pragma('journal_mode', { simple: true })).toBe('wal')
+    expect(second.pragma('foreign_keys', { simple: true })).toBe(1)
+  })
 })

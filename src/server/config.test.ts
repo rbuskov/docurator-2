@@ -5,6 +5,7 @@ const ENV_KEYS = [
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'OAUTH_REDIRECT_PORT',
+  'NODE_ENV',
 ] as const
 
 describe('server config', () => {
@@ -87,5 +88,16 @@ describe('server config', () => {
   it("defaults dbPath to './data/app.db'", async () => {
     const { config } = await import('./config.js')
     expect(config.dbPath).toBe('./data/app.db')
+  })
+
+  it("defaults nodeEnv to 'development' when NODE_ENV is unset", async () => {
+    const { config } = await import('./config.js')
+    expect(config.nodeEnv).toBe('development')
+  })
+
+  it("reads nodeEnv from NODE_ENV env var when set to 'production'", async () => {
+    process.env.NODE_ENV = 'production'
+    const { config } = await import('./config.js')
+    expect(config.nodeEnv).toBe('production')
   })
 })

@@ -7,6 +7,8 @@ let _path: string | undefined
 export function getDb(): Database.Database {
   if (_db === undefined) {
     _db = new Database(_path ?? config.dbPath)
+    _db.pragma('journal_mode = WAL')
+    _db.pragma('foreign_keys = ON')
   }
   return _db
 }
