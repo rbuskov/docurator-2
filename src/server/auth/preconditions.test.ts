@@ -109,4 +109,35 @@ describe('requireConnectedAccount', () => {
     expect(result.account.status).toBe('connected')
     expect(result.account.email).toBe('alice@example.com')
   })
+
+  describe('requireKnownAccount', () => {
+    it('returns 404 account_not_found when no row exists', () => {
+      const result = preconditions.requireKnownAccount(99999)
+      expect(result).toEqual({
+        ok: false,
+        status: 404,
+        body: { error: 'account_not_found' },
+      })
+    })
+
+    it('returns ok for a connected account regardless of session presence', () => {
+      const id = seedAccount()
+      // No session attached on purpose — requireKnownAccount must NOT require it.
+      const result = preconditions.requireKnownAccount(id)
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.account.id).toBe(id)
+      // The relaxed check must NOT have flipped the row to needs_reauth.
+      expect(accounts.findById(id)?.status).toBe('connected')
+    })
+
+    it('returns ok for a needs_reauth account too (DB existence is the only gate)', () => {
+      const id = seedAccount()
+      accounts.updateStatus(id, 'needs_reauth')
+      const result = preconditions.requireKnownAccount(id)
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.account.status).toBe('needs_reauth')
+    })
+  })
 })

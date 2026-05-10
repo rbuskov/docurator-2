@@ -25,8 +25,15 @@ function makeFakeClient(opts: {
       if (opts.get) return opts.get(id)
       return {}
     },
-    // Stub — no test in this file exercises attachments.
+    // Stubs — no test in this file exercises these.
     getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
+    historyList: async () => ({ history: [] }),
+    getProfile: async () => ({
+      email_address: null,
+      history_id: null,
+      messages_total: null,
+      threads_total: null,
+    }),
   }
 }
 
@@ -290,6 +297,13 @@ describe('GET /api/accounts/:id/messages', () => {
       },
       getMessage: async () => ({}),
       getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
+      historyList: async () => ({ history: [] }),
+      getProfile: async () => ({
+        email_address: null,
+        history_id: null,
+        messages_total: null,
+        threads_total: null,
+      }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -308,6 +322,13 @@ describe('GET /api/accounts/:id/messages', () => {
       },
       getMessage: async () => ({}),
       getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
+      historyList: async () => ({ history: [] }),
+      getProfile: async () => ({
+        email_address: null,
+        history_id: null,
+        messages_total: null,
+        threads_total: null,
+      }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -324,6 +345,13 @@ describe('GET /api/accounts/:id/messages', () => {
       },
       getMessage: async () => ({}),
       getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
+      historyList: async () => ({ history: [] }),
+      getProfile: async () => ({
+        email_address: null,
+        history_id: null,
+        messages_total: null,
+        threads_total: null,
+      }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -356,6 +384,13 @@ describe('GET /api/accounts/:id/messages', () => {
         throw new Error('Gmail 500: something broke')
       },
       getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
+      historyList: async () => ({ history: [] }),
+      getProfile: async () => ({
+        email_address: null,
+        history_id: null,
+        messages_total: null,
+        threads_total: null,
+      }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })
@@ -377,6 +412,13 @@ describe('GET /api/accounts/:id/messages', () => {
       },
       getMessage: async () => ({}),
       getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
+      historyList: async () => ({ history: [] }),
+      getProfile: async () => ({
+        email_address: null,
+        history_id: null,
+        messages_total: null,
+        threads_total: null,
+      }),
     }
 
     app = await buildApp({ createGmailClient: () => fakeClient })

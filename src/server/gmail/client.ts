@@ -38,10 +38,33 @@ export type AttachmentResult = {
   size: number
 }
 
+// snake_case input shape matches how the spec describes the call surface; the
+// internal call maps to gmail's camelCase request fields.
+export type HistoryListArgs = {
+  start_history_id: string
+  history_types?: string[]
+  page_token?: string
+}
+
+export type HistoryListResult = {
+  history: gmail_v1.Schema$History[]
+  history_id?: string | null
+  next_page_token?: string | null
+}
+
+export type ProfileResult = {
+  email_address: string | null
+  history_id: string | null
+  messages_total: number | null
+  threads_total: number | null
+}
+
 export type GmailClient = {
   listMessages(args: ListMessagesArgs): Promise<ListMessagesResult>
   getMessage(id: string, args: GetMessageArgs): Promise<gmail_v1.Schema$Message>
   getAttachment(messageId: string, attachmentId: string): Promise<AttachmentResult>
+  historyList(args: HistoryListArgs): Promise<HistoryListResult>
+  getProfile(): Promise<ProfileResult>
 }
 
 export function createGmailClient(accountId: number): GmailClient {
@@ -94,6 +117,34 @@ export function createGmailClient(accountId: number): GmailClient {
         return {
           data: Buffer.from(raw, 'base64url'),
           size: typeof res.data.size === 'number' ? res.data.size : 0,
+        }
+      }),
+
+    historyList: (args) =>
+      withFreshTokens(accountId, async (sessionClient) => {
+        const gmail = gmailFactory(sessionClient as unknown as OAuth2Client)
+        const res = await gmail.users.history.list({
+          userId: 'me',
+          startHistoryId: args.start_history_id,
+          ...(args.history_types !== undefined ? { historyTypes: args.history_types } : {}),
+          ...(args.page_token !== undefined ? { pageToken: args.page_token } : {}),
+        })
+        return {
+          history: res.data.history ?? [],
+          history_id: res.data.historyId,
+          next_page_token: res.data.nextPageToken,
+        }
+      }),
+
+    getProfile: () =>
+      withFreshTokens(accountId, async (sessionClient) => {
+        const gmail = gmailFactory(sessionClient as unknown as OAuth2Client)
+        const res = await gmail.users.getProfile({ userId: 'me' })
+        return {
+          email_address: res.data.emailAddress ?? null,
+          history_id: res.data.historyId ?? null,
+          messages_total: res.data.messagesTotal ?? null,
+          threads_total: res.data.threadsTotal ?? null,
         }
       }),
   }

@@ -19,6 +19,17 @@ import {
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 export const MAX_PDF_PAGES = 5
 
+// The orchestrator (Slice 006) needs the raw bytes the classifier saw so it
+// can persist them without re-fetching. Keys are stable artifact descriptors:
+//   `attachment:<filename>`         — raw attachment bytes
+//   `body:rendered_html_source`     — raw HTML when html_was_used (the
+//                                     orchestrator runs Playwright on it)
+// The field is intentionally non-JSON-serializable (`Map<string, Buffer>`); it
+// lives off the type because the only consumer is the in-process orchestrator.
+export type ClassifyResult = ClassifyResponse & {
+  source_bytes?: Map<string, Buffer>
+}
+
 export type ClassifyMessageArgs = {
   account_id: number
   message_id: string
@@ -38,7 +49,7 @@ const RECEIPT_IMAGE_MIME_PREFIX = 'image/'
 export async function classifyMessage(
   args: ClassifyMessageArgs,
   deps: ClassifyMessageDeps,
-): Promise<ClassifyResponse> {
+): Promise<ClassifyResult> {
   const _createGmailClient = deps.createGmailClient ?? defaultCreateGmailClient
   const _chat = deps.chat ?? defaultChat
   const _renderPdfToImages = deps.renderPdfToImages ?? defaultRenderPdfToImages
@@ -56,12 +67,16 @@ export async function classifyMessage(
   const images: string[] = []
   const attachmentsMetadata: AttachmentMetadata[] = []
   const artifacts: Artifact[] = []
+  const sourceBytes = new Map<string, Buffer>()
 
   if (body.text !== '') {
     artifacts.push({
       kind: 'body',
       mime_type: body.html_was_used ? 'text/html' : 'text/plain',
     })
+    if (body.html_was_used && body.html_source !== undefined) {
+      sourceBytes.set('body:rendered_html_source', Buffer.from(body.html_source, 'utf8'))
+    }
   }
 
   for (const att of attachments.all) {
@@ -111,6 +126,7 @@ export async function classifyMessage(
       mime_type: att.mime_type,
       filename: att.filename,
     })
+    sourceBytes.set(`attachment:${att.filename}`, fetched.data)
   }
 
   const messages = buildClassificationMessages({
@@ -157,6 +173,7 @@ export async function classifyMessage(
     ...validated.data,
     model_used: deps.ollamaModel,
     artifacts,
+    source_bytes: sourceBytes,
   }
 }
 

@@ -11,5 +11,12 @@ export default defineConfig({
     // landed and pushed first-test wall time on a couple of files past 15s.
     // Real assertion failures still surface promptly.
     testTimeout: 30000,
+    // beforeEach hooks in test files that `vi.resetModules()` and re-import
+    // the orchestrator pay the full transitive-import cost on every test
+    // (orchestrator → classify → render-html-pdf → playwright). Under
+    // full-suite parallelism a hot fork can stall past the default 10s hook
+    // timeout, leaving DB state half-initialised and cascading into the next
+    // test's beforeEach. Match the test timeout — same justification.
+    hookTimeout: 30000,
   },
 })

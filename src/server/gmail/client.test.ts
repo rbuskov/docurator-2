@@ -26,6 +26,17 @@ type AttachmentArgs = {
   id: string
 }
 
+type HistoryListArgs = {
+  userId: string
+  startHistoryId?: string
+  historyTypes?: string[]
+  pageToken?: string
+}
+
+type GetProfileArgs = {
+  userId: string
+}
+
 type FakeGmail = {
   users: {
     messages: {
@@ -35,10 +46,16 @@ type FakeGmail = {
         get: ReturnType<typeof vi.fn>
       }
     }
+    history: {
+      list: ReturnType<typeof vi.fn>
+    }
+    getProfile: ReturnType<typeof vi.fn>
   }
   __listCalls: ListArgs[]
   __getCalls: GetArgs[]
   __attachmentCalls: AttachmentArgs[]
+  __historyCalls: HistoryListArgs[]
+  __profileCalls: GetProfileArgs[]
 }
 
 function makeFakeGmail(opts: {
@@ -48,10 +65,16 @@ function makeFakeGmail(opts: {
   getError?: Error
   attachmentResponse?: unknown
   attachmentError?: Error
+  historyResponse?: unknown
+  historyError?: Error
+  profileResponse?: unknown
+  profileError?: Error
 }): FakeGmail {
   const listCalls: ListArgs[] = []
   const getCalls: GetArgs[] = []
   const attachmentCalls: AttachmentArgs[] = []
+  const historyCalls: HistoryListArgs[] = []
+  const profileCalls: GetProfileArgs[] = []
   const list = vi.fn(async (args: ListArgs) => {
     listCalls.push(args)
     if (opts.listError) throw opts.listError
@@ -67,6 +90,16 @@ function makeFakeGmail(opts: {
     if (opts.attachmentError) throw opts.attachmentError
     return { data: opts.attachmentResponse ?? {} }
   })
+  const historyList = vi.fn(async (args: HistoryListArgs) => {
+    historyCalls.push(args)
+    if (opts.historyError) throw opts.historyError
+    return { data: opts.historyResponse ?? {} }
+  })
+  const getProfile = vi.fn(async (args: GetProfileArgs) => {
+    profileCalls.push(args)
+    if (opts.profileError) throw opts.profileError
+    return { data: opts.profileResponse ?? {} }
+  })
   return {
     users: {
       messages: {
@@ -74,10 +107,14 @@ function makeFakeGmail(opts: {
         get,
         attachments: { get: attachmentGet },
       },
+      history: { list: historyList },
+      getProfile,
     },
     __listCalls: listCalls,
     __getCalls: getCalls,
     __attachmentCalls: attachmentCalls,
+    __historyCalls: historyCalls,
+    __profileCalls: profileCalls,
   }
 }
 
@@ -282,5 +319,163 @@ describe('createGmailClient.getAttachment', () => {
 
     const client = createGmailClient(1)
     await expect(client.getAttachment('msg1', 'att-1')).rejects.toBe(err)
+  })
+})
+
+describe('createGmailClient.historyList', () => {
+  it('calls gmail.users.history.list with userId="me" and startHistoryId', async () => {
+    const fake = makeFakeGmail({
+      historyResponse: { history: [], historyId: '123', nextPageToken: undefined },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    await client.historyList({ start_history_id: '100' })
+
+    expect(fake.users.history.list).toHaveBeenCalledTimes(1)
+    expect(fake.__historyCalls[0]).toEqual({
+      userId: 'me',
+      startHistoryId: '100',
+    })
+  })
+
+  it('passes history_types and page_token through when supplied', async () => {
+    const fake = makeFakeGmail({
+      historyResponse: { history: [], historyId: '200' },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    await client.historyList({
+      start_history_id: '100',
+      history_types: ['messageAdded'],
+      page_token: 'tok',
+    })
+
+    expect(fake.__historyCalls[0]).toEqual({
+      userId: 'me',
+      startHistoryId: '100',
+      historyTypes: ['messageAdded'],
+      pageToken: 'tok',
+    })
+  })
+
+  it('returns { history, history_id, next_page_token } from the API response', async () => {
+    const apiHistory = [{ id: 'h1', messagesAdded: [{ message: { id: 'm1', threadId: 't1' } }] }]
+    const fake = makeFakeGmail({
+      historyResponse: { history: apiHistory, historyId: '5000', nextPageToken: 'p2' },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    const result = await client.historyList({ start_history_id: '4000' })
+
+    expect(result.history).toBe(apiHistory)
+    expect(result.history_id).toBe('5000')
+    expect(result.next_page_token).toBe('p2')
+  })
+
+  it('normalizes a missing history field to an empty array', async () => {
+    const fake = makeFakeGmail({ historyResponse: { historyId: '5000' } })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    const result = await client.historyList({ start_history_id: '0' })
+    expect(result.history).toEqual([])
+  })
+
+  it('routes through session.withFreshTokens with the given accountId', async () => {
+    const fake = makeFakeGmail({ historyResponse: { history: [] } })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(77)
+    await client.historyList({ start_history_id: '0' })
+
+    expect(withFreshTokensSpy).toHaveBeenCalledTimes(1)
+    expect(withFreshTokensSpy.mock.calls[0]?.[0]).toBe(77)
+  })
+
+  it('rethrows session errors verbatim', async () => {
+    const err = new Error('invalid_grant: token revoked')
+    withFreshTokensSpy.mockImplementationOnce(async () => {
+      throw err
+    })
+
+    const client = createGmailClient(3)
+    await expect(client.historyList({ start_history_id: '0' })).rejects.toBe(err)
+  })
+
+  it('rethrows API errors verbatim (e.g. 404 stale history)', async () => {
+    const err = Object.assign(new Error('history id not found'), {
+      response: { status: 404 },
+    })
+    const fake = makeFakeGmail({ historyError: err })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    await expect(client.historyList({ start_history_id: '0' })).rejects.toBe(err)
+  })
+})
+
+describe('createGmailClient.getProfile', () => {
+  it('calls gmail.users.getProfile with userId="me"', async () => {
+    const fake = makeFakeGmail({
+      profileResponse: {
+        emailAddress: 'a@x.com',
+        historyId: '5000',
+        messagesTotal: 12345,
+        threadsTotal: 6789,
+      },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    await client.getProfile()
+
+    expect(fake.users.getProfile).toHaveBeenCalledTimes(1)
+    expect(fake.__profileCalls[0]).toEqual({ userId: 'me' })
+  })
+
+  it('returns { email_address, history_id, messages_total, threads_total } snake_cased from the API', async () => {
+    const fake = makeFakeGmail({
+      profileResponse: {
+        emailAddress: 'a@x.com',
+        historyId: '5000',
+        messagesTotal: 12345,
+        threadsTotal: 6789,
+      },
+    })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(1)
+    const result = await client.getProfile()
+
+    expect(result).toEqual({
+      email_address: 'a@x.com',
+      history_id: '5000',
+      messages_total: 12345,
+      threads_total: 6789,
+    })
+  })
+
+  it('routes through session.withFreshTokens with the given accountId', async () => {
+    const fake = makeFakeGmail({ profileResponse: {} })
+    setGmailFactoryForTest(() => fake as never)
+
+    const client = createGmailClient(42)
+    await client.getProfile()
+
+    expect(withFreshTokensSpy).toHaveBeenCalledTimes(1)
+    expect(withFreshTokensSpy.mock.calls[0]?.[0]).toBe(42)
+  })
+
+  it('rethrows session errors verbatim', async () => {
+    const err = new Error('invalid_grant')
+    withFreshTokensSpy.mockImplementationOnce(async () => {
+      throw err
+    })
+
+    const client = createGmailClient(3)
+    await expect(client.getProfile()).rejects.toBe(err)
   })
 })

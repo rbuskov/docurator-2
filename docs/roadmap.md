@@ -5,7 +5,7 @@
 - [x] 003-see-my-emails-listed
 - [x] 004-persistent-state-and-processed-messages-log
 - [x] 005-classify-one-email-end-to-end
-- [ ] 006-sync-and-store-receipts
+- [x] 006-sync-and-store-receipts
 - [ ] 007-review-and-approve
 - [ ] 008-edit-extracted-fields
 - [ ] 009-tags

@@ -5,6 +5,9 @@ export type ExtractedBody = {
   text: string
   html_was_used: boolean
   inline_image_count: number
+  // Set only when html_was_used is true. The orchestrator (Slice 006) feeds
+  // this through Playwright when the body itself is the receipt.
+  html_source?: string
 }
 
 type Part = gmail_v1.Schema$MessagePart
@@ -32,6 +35,7 @@ export function extractBodyText(payload: Part | undefined): ExtractedBody {
       text: htmlToText(collected.html),
       html_was_used: true,
       inline_image_count: collected.inlineCount,
+      html_source: collected.html,
     }
   }
   return { text: '', html_was_used: false, inline_image_count: collected.inlineCount }

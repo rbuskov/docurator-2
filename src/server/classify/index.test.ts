@@ -115,6 +115,13 @@ function fakeGmailClient(message: Message, attachmentBytes?: Buffer): GmailClien
       data: attachmentBytes ?? Buffer.alloc(0),
       size: attachmentBytes?.length ?? 0,
     }),
+    historyList: async () => ({ history: [] }),
+    getProfile: async () => ({
+      email_address: null,
+      history_id: null,
+      messages_total: null,
+      threads_total: null,
+    }),
   }
 }
 
@@ -222,6 +229,13 @@ describe('classifyMessage', () => {
       listMessages: async () => ({ messages: [] }),
       getMessage: async () => tooLargeAttachmentMessage(),
       getAttachment,
+      historyList: async () => ({ history: [] }),
+      getProfile: async () => ({
+        email_address: null,
+        history_id: null,
+        messages_total: null,
+        threads_total: null,
+      }),
     }
     const result = await classifyMessage(
       { account_id: 1, message_id: 'msg5' },
@@ -296,5 +310,104 @@ describe('classifyMessage', () => {
       expect(err).toBeInstanceOf(OllamaParseError)
       expect((err as OllamaParseError).rawResponse).toContain('"classification":"spam"')
     }
+  })
+
+  describe('source_bytes', () => {
+    it('returns raw attachment bytes keyed by attachment:<filename> for an included PDF', async () => {
+      const renderPdfToImages = vi.fn(async () => [Buffer.from('img')])
+      const chat = vi.fn<ChatFn>(async () => validClassificationJson())
+      const pdfBytes = Buffer.from('%PDF-1.4\nfake-pdf-bytes')
+      const result = await classifyMessage(
+        { account_id: 1, message_id: 'msg3' },
+        {
+          ollamaUrl: 'http://x',
+          ollamaModel: 'm',
+          ollamaTimeoutMs: 5000,
+          createGmailClient: () => fakeGmailClient(pdfAttachmentMessage(), pdfBytes),
+          chat,
+          renderPdfToImages,
+        },
+      )
+      expect(result.source_bytes).toBeInstanceOf(Map)
+      const entry = result.source_bytes?.get('attachment:invoice.pdf')
+      expect(entry).toBeInstanceOf(Buffer)
+      expect(entry?.equals(pdfBytes)).toBe(true)
+    })
+
+    it('returns raw image bytes keyed by attachment:<filename> for an image attachment', async () => {
+      const chat = vi.fn<ChatFn>(async () => validClassificationJson())
+      const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      const result = await classifyMessage(
+        { account_id: 1, message_id: 'msg4' },
+        {
+          ollamaUrl: 'http://x',
+          ollamaModel: 'm',
+          ollamaTimeoutMs: 5000,
+          createGmailClient: () => fakeGmailClient(imageAttachmentMessage(), pngBytes),
+          chat,
+        },
+      )
+      const entry = result.source_bytes?.get('attachment:receipt.png')
+      expect(entry?.equals(pngBytes)).toBe(true)
+    })
+
+    it("returns body HTML keyed by 'body:rendered_html_source' when html_was_used", async () => {
+      const chat = vi.fn(async () => validClassificationJson({ classification: 'other' }))
+      const result = await classifyMessage(
+        { account_id: 1, message_id: 'msg2' },
+        {
+          ollamaUrl: 'http://x',
+          ollamaModel: 'm',
+          ollamaTimeoutMs: 5000,
+          createGmailClient: () => fakeGmailClient(htmlOnlyMessage()),
+          chat,
+        },
+      )
+      const html = result.source_bytes?.get('body:rendered_html_source')
+      expect(html).toBeInstanceOf(Buffer)
+      expect(html?.toString('utf8')).toBe('<p>hi</p>')
+    })
+
+    it('does NOT include body:rendered_html_source when the body was plain text', async () => {
+      const chat = vi.fn(async () => validClassificationJson())
+      const result = await classifyMessage(
+        { account_id: 1, message_id: 'msg1' },
+        {
+          ollamaUrl: 'http://x',
+          ollamaModel: 'm',
+          ollamaTimeoutMs: 5000,
+          createGmailClient: () => fakeGmailClient(plainTextMessage()),
+          chat,
+        },
+      )
+      expect(result.source_bytes?.has('body:rendered_html_source')).toBe(false)
+    })
+
+    it('does NOT include skipped (over-size) attachments in source_bytes', async () => {
+      const chat = vi.fn(async () => validClassificationJson({ classification: 'other' }))
+      const client: GmailClient = {
+        listMessages: async () => ({ messages: [] }),
+        getMessage: async () => tooLargeAttachmentMessage(),
+        getAttachment: async () => ({ data: Buffer.alloc(0), size: 0 }),
+        historyList: async () => ({ history: [] }),
+        getProfile: async () => ({
+          email_address: null,
+          history_id: null,
+          messages_total: null,
+          threads_total: null,
+        }),
+      }
+      const result = await classifyMessage(
+        { account_id: 1, message_id: 'msg5' },
+        {
+          ollamaUrl: 'http://x',
+          ollamaModel: 'm',
+          ollamaTimeoutMs: 5000,
+          createGmailClient: () => client,
+          chat,
+        },
+      )
+      expect(result.source_bytes?.has('attachment:huge.pdf')).toBe(false)
+    })
   })
 })

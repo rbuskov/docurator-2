@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AccountPicker } from '../components/AccountPicker.js'
-import { ClassifyRowAction } from '../components/ClassifyRowAction.js'
-import type { Account, Message } from '../types.js'
+import type { Account, Document } from '../types.js'
 
 export const LAST_INBOX_ACCOUNT_KEY = 'docurator.lastInboxAccountId'
 
+const DASH = '—'
+
 type ErrorState =
   | { kind: 'none' }
-  | { kind: 'needs_reauth' }
-  | { kind: 'gmail_error'; message: string }
   | { kind: 'unexpected'; message: string }
 
 function readStoredId(): number | null {
@@ -31,10 +30,7 @@ function persistId(id: number): void {
   }
 }
 
-function pickInitialAccount(
-  accounts: Account[],
-  storedId: number | null,
-): number | null {
+function pickInitialAccount(accounts: Account[], storedId: number | null): number | null {
   if (storedId !== null) {
     const stored = accounts.find((a) => a.id === storedId)
     if (stored !== undefined && stored.status === 'connected') {
@@ -45,11 +41,15 @@ function pickInitialAccount(
   return first ? first.id : null
 }
 
+function or(value: string | number | null): string {
+  return value === null ? DASH : String(value)
+}
+
 export function Inbox() {
   const [accounts, setAccounts] = useState<Account[] | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
-  const [messages, setMessages] = useState<Message[] | null>(null)
-  const [loadingMessages, setLoadingMessages] = useState(false)
+  const [documents, setDocuments] = useState<Document[] | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<ErrorState>({ kind: 'none' })
 
   useEffect(() => {
@@ -79,43 +79,34 @@ export function Inbox() {
 
   useEffect(() => {
     if (selectedAccountId === null) {
-      setMessages(null)
+      setDocuments(null)
       return
     }
     persistId(selectedAccountId)
     let cancelled = false
-    setLoadingMessages(true)
+    setLoading(true)
     setError({ kind: 'none' })
-    setMessages(null)
+    setDocuments(null)
     void (async () => {
       try {
         const res = await fetch(
-          `/api/accounts/${selectedAccountId}/messages?limit=50`,
+          `/api/accounts/${selectedAccountId}/documents?limit=50&offset=0`,
         )
         if (cancelled) return
-        if (res.status === 401) {
-          setError({ kind: 'needs_reauth' })
-          return
-        }
-        if (res.status === 502) {
-          const body = (await res.json().catch(() => ({}))) as { message?: string }
-          setError({ kind: 'gmail_error', message: body.message ?? 'unknown error' })
-          return
-        }
         if (!res.ok) {
           setError({ kind: 'unexpected', message: `Status ${res.status}` })
           return
         }
-        const data = (await res.json()) as { messages: Message[] }
-        setMessages(data.messages)
+        const data = (await res.json()) as { rows: Document[]; total: number }
+        setDocuments(data.rows)
       } catch (err) {
         if (cancelled) return
         setError({
           kind: 'unexpected',
-          message: err instanceof Error ? err.message : 'Failed to load messages',
+          message: err instanceof Error ? err.message : 'Failed to load documents',
         })
       } finally {
-        if (!cancelled) setLoadingMessages(false)
+        if (!cancelled) setLoading(false)
       }
     })()
     return () => {
@@ -156,42 +147,45 @@ export function Inbox() {
         onChange={(id) => setSelectedAccountId(id)}
         includeDisconnected
       />
-      {hasConnected && error.kind === 'needs_reauth' && (
-        <p role="alert">
-          This account needs to be reconnected — go to the{' '}
-          <Link to="/">Dashboard</Link>.
-        </p>
-      )}
-      {hasConnected && error.kind === 'gmail_error' && (
-        <p role="alert">Gmail returned an error: {error.message}. Try again.</p>
-      )}
       {hasConnected && error.kind === 'unexpected' && (
         <p role="alert">Unexpected error: {error.message}.</p>
       )}
-      {hasConnected && error.kind === 'none' && loadingMessages && (
-        <p>Loading messages…</p>
+      {hasConnected && error.kind === 'none' && loading && <p>Loading documents…</p>}
+      {hasConnected && error.kind === 'none' && documents !== null && documents.length === 0 && (
+        <p>No documents yet — kick off a sync from the Dashboard.</p>
       )}
-      {hasConnected && error.kind === 'none' && messages !== null && selectedAccountId !== null && (
+      {hasConnected && error.kind === 'none' && documents !== null && documents.length > 0 && (
         <table>
           <thead>
             <tr>
+              <th>Vendor</th>
+              <th>Amount</th>
+              <th>Currency</th>
+              <th>Transaction Date</th>
               <th>Subject</th>
-              <th>Sender</th>
-              <th>Date</th>
-              <th>Classify</th>
+              <th>Sender Domain</th>
+              <th>Created At</th>
+              <th>Preview</th>
             </tr>
           </thead>
           <tbody>
-            {messages.map((m) => (
-              <tr key={m.id}>
-                <td>{m.subject}</td>
-                <td>{m.from}</td>
-                <td>{m.date}</td>
+            {documents.map((d) => (
+              <tr key={d.id}>
+                <td>{or(d.vendor)}</td>
+                <td>{or(d.amount)}</td>
+                <td>{or(d.currency)}</td>
+                <td>{or(d.transaction_date)}</td>
+                <td>{or(d.subject)}</td>
+                <td>{or(d.sender_domain)}</td>
+                <td>{d.created_at}</td>
                 <td>
-                  <ClassifyRowAction
-                    account_id={selectedAccountId}
-                    message_id={m.id}
-                  />
+                  <a
+                    href={`/api/documents/${d.id}/file`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Preview
+                  </a>
                 </td>
               </tr>
             ))}
