@@ -6,6 +6,7 @@ Self-hosted Gmail receipt curator. See [docs/vision.md](docs/vision.md) for the 
 
 - Node.js 20+
 - A Google Cloud OAuth client (Desktop-app type) — see below
+- Ollama running on the host with a vision-capable model — see below
 
 ## Google Cloud OAuth setup
 
@@ -30,6 +31,40 @@ Each user supplies their own OAuth credentials; nothing is shared. The same clie
    ```
 
 When you connect a Gmail account, Google's consent screen will warn that the app is unverified — that's expected for testing-mode OAuth clients. Click "Advanced" → "Go to {app name} (unsafe)" to proceed.
+
+## Ollama setup
+
+Docurator runs classification entirely on your machine via [Ollama](https://ollama.com/) — no email content ever leaves the host. You install Ollama on the host (not inside the Docurator container); the app reaches it via `host.docker.internal:11434` by default.
+
+1. **Install Ollama** — see <https://ollama.com/download>. Quick options:
+   - macOS / Windows: download the desktop app from the link above.
+   - Linux: `curl -fsSL https://ollama.com/install.sh | sh`.
+2. **Start Ollama.** The desktop app starts automatically on login. On Linux: `ollama serve` (or rely on the systemd unit the installer adds). The default port is `11434`; leave it as-is.
+3. **Pull the default vision model:**
+   ```sh
+   ollama pull qwen2.5vl:7b
+   ```
+   This is ~5 GB. Other vision-capable models work too (e.g. `llava:13b`, `llama3.2-vision`); set `OLLAMA_MODEL` accordingly. Non-vision models will produce poor results on receipts that ship as images or PDFs.
+4. **Verify it's reachable:** `curl http://localhost:11434/api/tags` should return JSON listing your installed models.
+5. **(Optional) override the defaults in `.env`:**
+   ```
+   OLLAMA_URL=http://host.docker.internal:11434
+   OLLAMA_MODEL=qwen2.5vl:7b
+   OLLAMA_TIMEOUT_MS=120000
+   ```
+   The defaults match the values above; you only need these lines if you've chosen a different model or moved Ollama to another host.
+
+The Dashboard surfaces an Ollama health badge — green when reachable and the model is available, yellow when reachable but the model isn't pulled, red when unreachable. If it stays red after Ollama is running, see the troubleshooting note below.
+
+### Linux: `host.docker.internal` may not resolve
+
+`host.docker.internal` is built into Docker Desktop on macOS and Windows but not on plain Linux. If the badge stays red on Linux even with Ollama running, set `OLLAMA_URL` to the host's reachable address as seen from the container:
+
+```
+OLLAMA_URL=http://172.17.0.1:11434
+```
+
+`172.17.0.1` is the default Docker bridge gateway and resolves to the host on most Linux setups. If your Docker network uses a different bridge, run `ip addr show docker0` on the host to find the right address. Restart `docker-compose` after editing `.env`.
 
 ## Run it (Docker — recommended)
 

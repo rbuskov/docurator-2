@@ -14,7 +14,8 @@
     "build": "npm run check:gmail-readonly && vite build && tsc -p tsconfig.server.json && node -e \"require('node:fs').cpSync('src/server/db/migrations','dist/server/db/migrations',{recursive:true})\"",
     "start": "NODE_ENV=production node --env-file=.env dist/server/index.js",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "postinstall": "playwright install chromium"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
@@ -26,6 +27,7 @@
     "hono": "^4.6.0",
     "node-html-parser": "^7.1.0",
     "pdfjs-dist": "^4.10.38",
+    "playwright": "^1.59.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^6",

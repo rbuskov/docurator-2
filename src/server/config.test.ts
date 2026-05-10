@@ -9,6 +9,8 @@ const ENV_KEYS = [
   'OLLAMA_URL',
   'OLLAMA_MODEL',
   'OLLAMA_TIMEOUT_MS',
+  'SYNC_DEFAULT_WINDOW_DAYS',
+  'MAX_CONCURRENT_CLASSIFY',
 ] as const
 
 describe('server config', () => {
@@ -141,5 +143,44 @@ describe('server config', () => {
     process.env.OLLAMA_TIMEOUT_MS = 'banana'
     const { config } = await import('./config.js')
     expect(config.ollamaTimeoutMs).toBe(120000)
+  })
+
+  it('defaults syncDefaultWindowDays to 30 when SYNC_DEFAULT_WINDOW_DAYS is unset', async () => {
+    const { config } = await import('./config.js')
+    expect(config.syncDefaultWindowDays).toBe(30)
+  })
+
+  it('reads syncDefaultWindowDays from SYNC_DEFAULT_WINDOW_DAYS when set', async () => {
+    process.env.SYNC_DEFAULT_WINDOW_DAYS = '7'
+    const { config } = await import('./config.js')
+    expect(config.syncDefaultWindowDays).toBe(7)
+  })
+
+  it('falls back to default 30 when SYNC_DEFAULT_WINDOW_DAYS is non-numeric', async () => {
+    process.env.SYNC_DEFAULT_WINDOW_DAYS = 'banana'
+    const { config } = await import('./config.js')
+    expect(config.syncDefaultWindowDays).toBe(30)
+  })
+
+  it('defaults maxConcurrentClassify to 1 when MAX_CONCURRENT_CLASSIFY is unset', async () => {
+    const { config } = await import('./config.js')
+    expect(config.maxConcurrentClassify).toBe(1)
+  })
+
+  it('reads maxConcurrentClassify from MAX_CONCURRENT_CLASSIFY when set', async () => {
+    process.env.MAX_CONCURRENT_CLASSIFY = '3'
+    const { config } = await import('./config.js')
+    expect(config.maxConcurrentClassify).toBe(3)
+  })
+
+  it('falls back to default 1 when MAX_CONCURRENT_CLASSIFY is non-numeric or non-positive', async () => {
+    process.env.MAX_CONCURRENT_CLASSIFY = 'banana'
+    const { config } = await import('./config.js')
+    expect(config.maxConcurrentClassify).toBe(1)
+  })
+
+  it("defaults invoicesDir to './invoices'", async () => {
+    const { config } = await import('./config.js')
+    expect(config.invoicesDir).toBe('./invoices')
   })
 })

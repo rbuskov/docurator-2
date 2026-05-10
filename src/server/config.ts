@@ -4,6 +4,9 @@ const DEFAULT_DB_PATH = './data/app.db'
 const DEFAULT_OLLAMA_URL = 'http://host.docker.internal:11434'
 const DEFAULT_OLLAMA_MODEL = 'qwen2.5vl:7b'
 const DEFAULT_OLLAMA_TIMEOUT_MS = 120000
+const DEFAULT_SYNC_WINDOW_DAYS = 30
+const DEFAULT_MAX_CONCURRENT_CLASSIFY = 1
+const DEFAULT_INVOICES_DIR = './invoices'
 
 const port = process.env.APP_PORT !== undefined ? Number(process.env.APP_PORT) : DEFAULT_PORT
 const oauthRedirectPort =
@@ -36,6 +39,24 @@ const ollamaTimeoutMs =
     ? ollamaTimeoutRaw
     : DEFAULT_OLLAMA_TIMEOUT_MS
 
+const syncWindowRaw =
+  process.env.SYNC_DEFAULT_WINDOW_DAYS !== undefined
+    ? Number(process.env.SYNC_DEFAULT_WINDOW_DAYS)
+    : NaN
+const syncDefaultWindowDays =
+  Number.isFinite(syncWindowRaw) && syncWindowRaw > 0
+    ? syncWindowRaw
+    : DEFAULT_SYNC_WINDOW_DAYS
+
+const concurrentClassifyRaw =
+  process.env.MAX_CONCURRENT_CLASSIFY !== undefined
+    ? Number(process.env.MAX_CONCURRENT_CLASSIFY)
+    : NaN
+const maxConcurrentClassify =
+  Number.isFinite(concurrentClassifyRaw) && concurrentClassifyRaw > 0
+    ? concurrentClassifyRaw
+    : DEFAULT_MAX_CONCURRENT_CLASSIFY
+
 export const config = Object.freeze({
   port,
   oauthRedirectPort,
@@ -47,4 +68,7 @@ export const config = Object.freeze({
   ollamaUrl,
   ollamaModel,
   ollamaTimeoutMs,
+  syncDefaultWindowDays,
+  maxConcurrentClassify,
+  invoicesDir: DEFAULT_INVOICES_DIR,
 })

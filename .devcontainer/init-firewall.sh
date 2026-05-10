@@ -25,10 +25,12 @@ else
 fi
 
 # First allow DNS and localhost before any restrictions
-# Allow outbound DNS
+# Allow outbound DNS over UDP and TCP
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
 # Allow inbound DNS responses
-iptables -A INPUT -p udp --sport 53 -j ACCEPT
+iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED -j ACCEPT
+iptables -A INPUT -p tcp --sport 53 -m state --state ESTABLISHED -j ACCEPT
 # Allow outbound SSH
 iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
 # Allow inbound SSH responses
@@ -63,6 +65,31 @@ while read -r cidr; do
     ipset add allowed-domains "$cidr"
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
+resolve_domain() {
+    local domain="$1"
+    local ips
+
+    echo "Resolving $domain..."
+    ips=$(dig +tcp +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
+    if [ -z "$ips" ]; then
+        ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
+    fi
+
+    if [ -z "$ips" ]; then
+        echo "ERROR: Failed to resolve $domain"
+        exit 1
+    fi
+
+    while read -r ip; do
+        if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            echo "ERROR: Invalid IP from DNS for $domain: $ip"
+            exit 1
+        fi
+        echo "Adding $ip for $domain"
+        ipset add allowed-domains "$ip"
+    done < <(printf '%s\n' "$ips")
+}
+
 # Resolve and add other allowed domains
 for domain in \
     "registry.npmjs.org" \
@@ -76,21 +103,7 @@ for domain in \
     "accounts.google.com" \
     "oauth2.googleapis.com" \
     "www.googleapis.com"; do
-    echo "Resolving $domain..."
-    ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
-    if [ -z "$ips" ]; then
-        echo "ERROR: Failed to resolve $domain"
-        exit 1
-    fi
-
-    while read -r ip; do
-        if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            echo "ERROR: Invalid IP from DNS for $domain: $ip"
-            exit 1
-        fi
-        echo "Adding $ip for $domain"
-        ipset add allowed-domains "$ip"
-    done < <(echo "$ips")
+    resolve_domain "$domain"
 done
 
 # Get host IP from default route

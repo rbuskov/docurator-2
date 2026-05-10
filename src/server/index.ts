@@ -11,6 +11,7 @@ const moduleDir = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(moduleDir, "./db/migrations");
 
 mkdirSync(dirname(resolve(config.dbPath)), { recursive: true });
+mkdirSync(resolve(config.invoicesDir), { recursive: true });
 migrate(getDb(), migrationsDir);
 
 // In production, serve the built client from `dist/client` (sibling of
